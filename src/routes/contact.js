@@ -24,28 +24,54 @@ const contactValidation = [
     .isLength({ max: 254 })
     .withMessage('El email es demasiado largo'),
     
-  body('subject')
+  body('phone')
     .trim()
-    .isLength({ min: 5, max: 200 })
-    .withMessage('El asunto debe tener entre 5 y 200 caracteres')
-    .matches(/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\.,;:¿?¡!\-()]+$/)
-    .withMessage('El asunto contiene caracteres no permitidos'),
+    .isLength({ min: 9, max: 20 })
+    .withMessage('El teléfono debe tener entre 9 y 20 caracteres')
+    .matches(/^[\+]?[0-9\s\-\(\)]{9,20}$/)
+    .withMessage('El formato del teléfono no es válido'),
+    
+  body('company')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('El nombre de la empresa debe tener entre 2 y 100 caracteres')
+    .matches(/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\.,&\-()]+$/)
+    .withMessage('El nombre de la empresa contiene caracteres no permitidos'),
+    
+  body('position')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('El puesto debe tener entre 2 y 100 caracteres')
+    .matches(/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s\.,&\-()]+$/)
+    .withMessage('El puesto contiene caracteres no permitidos'),
     
   body('message')
     .trim()
     .isLength({ min: 10, max: 2000 })
     .withMessage('El mensaje debe tener entre 10 y 2000 caracteres'),
     
-  body('phone')
-    .optional()
-    .trim()
-    .matches(/^[\+]?[0-9\s\-\(\)]{9,20}$/)
-    .withMessage('El formato del teléfono no es válido'),
+  body('acceptPrivacy')
+    .isBoolean()
+    .withMessage('Debe aceptar la política de privacidad')
+    .custom(value => {
+      if (value !== true) {
+        throw new Error('Debe aceptar la política de privacidad para continuar');
+      }
+      return true;
+    }),
     
   // Validaciones adicionales de seguridad
   body('name').custom(value => {
     if (/<script|javascript:|on\w+=/i.test(value)) {
       throw new Error('El nombre contiene contenido no permitido');
+    }
+    return true;
+  }),
+  
+  body('company').custom(value => {
+    if (/<script|javascript:|on\w+=/i.test(value)) {
+      throw new Error('El nombre de la empresa contiene contenido no permitido');
     }
     return true;
   }),
@@ -83,14 +109,17 @@ router.post('/contact', contactValidation, async (req, res) => {
     }
 
     // Extraer y sanitizar datos
-    const { name, email, subject, message, phone } = req.body;
+    const { name, email, phone, company, position, message, acceptPrivacy } = req.body;
     
     const contactData = {
       name: sanitizeInput(name),
       email: email.toLowerCase(),
-      subject: sanitizeInput(subject),
+      phone: sanitizeInput(phone),
+      company: sanitizeInput(company),
+      position: position ? sanitizeInput(position) : null,
       message: sanitizeInput(message),
-      phone: phone ? sanitizeInput(phone) : null
+      acceptPrivacy: acceptPrivacy,
+      subject: 'Un nuevo cliente ha solicitado un informe!' // Subject fijo
     };
 
     // Validación adicional del email
@@ -103,7 +132,7 @@ router.post('/contact', contactValidation, async (req, res) => {
     }
 
     // Log de la solicitud
-    console.log(`📧 Nueva solicitud de contacto de: ${contactData.email}`);
+    console.log(`📧 Nueva solicitud de informe de: ${contactData.email} (${contactData.company})`);
 
     // Enviar emails
     const emailResult = await emailService.sendEmails(contactData);
@@ -114,17 +143,17 @@ router.post('/contact', contactValidation, async (req, res) => {
     // Respuesta exitosa
     res.status(200).json({
       success: true,
-      message: 'Tu mensaje ha sido enviado correctamente. Te responderemos pronto.',
+      message: 'Tu solicitud de informe ha sido enviada correctamente. Te contactaremos pronto.',
       data: {
         timestamp: new Date().toISOString(),
         messageId: emailResult.contactEmail.messageId,
         confirmationSent: emailResult.confirmationEmail.success,
         responseTime: `${responseTime}ms`
       },
-      code: 'MESSAGE_SENT'
+      code: 'REPORT_REQUEST_SENT'
     });
 
-    console.log(`✅ Email de contacto procesado exitosamente en ${responseTime}ms`);
+    console.log(`✅ Solicitud de informe procesada exitosamente en ${responseTime}ms`);
 
   } catch (error) {
     const responseTime = Date.now() - startTime;
@@ -194,9 +223,12 @@ if (process.env.NODE_ENV === 'development') {
       const testData = {
         name: 'Usuario de Prueba',
         email: 'test@example.com',
-        subject: 'Mensaje de prueba',
-        message: 'Este es un mensaje de prueba del sistema.',
-        phone: '+34 600 000 000'
+        phone: '+34 600 000 000',
+        company: 'Empresa de Prueba S.L.',
+        position: 'Director General',
+        message: 'Este es un mensaje de prueba del sistema para solicitar un informe.',
+        acceptPrivacy: true,
+        subject: 'Un nuevo cliente ha solicitado un informe!'
       };
 
       const result = await emailService.sendEmails(testData);

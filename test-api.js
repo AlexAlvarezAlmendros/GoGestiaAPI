@@ -64,9 +64,11 @@ async function testContactValid() {
   const testData = {
     name: 'Usuario de Prueba',
     email: 'test@example.com',
-    subject: 'Mensaje de prueba del script automático',
-    message: 'Este es un mensaje de prueba generado automáticamente por el script de testing. Incluye suficientes caracteres para pasar la validación mínima.',
-    phone: '+34 600 123 456'
+    phone: '+34 600 123 456',
+    company: 'Empresa de Prueba S.L.',
+    position: 'Director General',
+    message: 'Este es un mensaje de prueba generado automáticamente por el script de testing. Incluye suficientes caracteres para pasar la validación mínima y solicitar un informe.',
+    acceptPrivacy: true
   };
   
   try {
@@ -109,8 +111,10 @@ async function testContactInvalid() {
       data: {
         name: 'Test',
         email: 'email-invalido',
-        subject: 'Test',
-        message: 'Mensaje de prueba'
+        phone: '+34 600 000 000',
+        company: 'Test Company',
+        message: 'Mensaje de prueba',
+        acceptPrivacy: true
       },
       expectedField: 'email'
     },
@@ -119,20 +123,24 @@ async function testContactInvalid() {
       data: {
         name: 'X',
         email: 'test@example.com',
-        subject: 'Test',
-        message: 'Mensaje de prueba'
+        phone: '+34 600 000 000',
+        company: 'Test Company',
+        message: 'Mensaje de prueba',
+        acceptPrivacy: true
       },
       expectedField: 'name'
     },
     {
-      name: 'Mensaje muy corto',
+      name: 'Sin aceptar privacidad',
       data: {
         name: 'Test User',
         email: 'test@example.com',
-        subject: 'Test',
-        message: 'Corto'
+        phone: '+34 600 000 000',
+        company: 'Test Company',
+        message: 'Mensaje de prueba válido',
+        acceptPrivacy: false
       },
-      expectedField: 'message'
+      expectedField: 'acceptPrivacy'
     }
   ];
   
@@ -171,8 +179,10 @@ async function testRateLimit() {
   const testData = {
     name: 'Rate Limit Test',
     email: 'ratelimit@example.com',
-    subject: 'Rate limit test message',
-    message: 'Este es un mensaje para probar el rate limiting del sistema.'
+    phone: '+34 600 000 000',
+    company: 'Test Company Ltd.',
+    message: 'Este es un mensaje para probar el rate limiting del sistema.',
+    acceptPrivacy: true
   };
   
   let requests = 0;

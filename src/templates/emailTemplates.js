@@ -1,7 +1,7 @@
 /**
  * Template para email de contacto (enviado al administrador)
  */
-const contactEmailTemplate = ({ name, email, subject, message, phone, timestamp }) => `
+const contactEmailTemplate = ({ name, email, phone, company, position, message, timestamp }) => `
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -99,7 +99,7 @@ const contactEmailTemplate = ({ name, email, subject, message, phone, timestamp 
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Nuevo Mensaje de Contacto</h1>
+            <h1>🚀 Nueva Solicitud de Informe</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9;">GoGestia Contact Form</p>
         </div>
         
@@ -118,7 +118,6 @@ const contactEmailTemplate = ({ name, email, subject, message, phone, timestamp 
                 </div>
             </div>
             
-            ${phone ? `
             <div class="field">
                 <div class="field-label">📱 Teléfono</div>
                 <div class="field-value">
@@ -127,11 +126,22 @@ const contactEmailTemplate = ({ name, email, subject, message, phone, timestamp 
                     </a>
                 </div>
             </div>
+            
+            <div class="field">
+                <div class="field-label">🏢 Empresa</div>
+                <div class="field-value">${company}</div>
+            </div>
+            
+            ${position ? `
+            <div class="field">
+                <div class="field-label">💼 Puesto</div>
+                <div class="field-value">${position}</div>
+            </div>
             ` : ''}
             
             <div class="field priority-high">
                 <div class="field-label">📋 Asunto</div>
-                <div class="field-value">${subject}</div>
+                <div class="field-value">Un nuevo cliente ha solicitado un informe!</div>
             </div>
             
             <div class="field">
@@ -145,8 +155,9 @@ const contactEmailTemplate = ({ name, email, subject, message, phone, timestamp 
         </div>
         
         <div class="footer">
-            <p>Este mensaje fue enviado desde el formulario de contacto de GoGestia.</p>
+            <p>Esta solicitud de informe fue enviada desde el formulario de contacto de GoGestia.</p>
             <p>Para responder, utiliza el email: <strong>${email}</strong></p>
+            <p>Empresa: <strong>${company}</strong> ${position ? `- Puesto: <strong>${position}</strong>` : ''}</p>
         </div>
     </div>
 </body>
@@ -274,25 +285,26 @@ const confirmationEmailTemplate = ({ name, timestamp }) => `
     <div class="container">
         <div class="header">
             <div class="icon">✅</div>
-            <h1>¡Mensaje Recibido!</h1>
+            <h1>¡Solicitud Recibida!</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9; font-size: 16px;">
-                Gracias por contactar con GoGestia
+                Gracias por solicitar nuestro informe
             </p>
         </div>
         
         <div class="content">
             <p class="message">
                 Hola <span class="highlight">${name}</span>,<br><br>
-                Hemos recibido tu mensaje y queremos agradecerte por contactar con nosotros. 
-                <strong>Te responderemos lo antes posible</strong>, normalmente en un plazo de 24-48 horas.
+                Hemos recibido tu solicitud de informe y queremos agradecerte por confiar en GoGestia. 
+                <strong>Te contactaremos lo antes posible</strong> para proporcionarte la información solicitada, 
+                normalmente en un plazo de 24-48 horas.
             </p>
             
             <div class="info-box">
                 <h3>🔔 ¿Qué pasa ahora?</h3>
                 <ul>
-                    <li><strong>Revisión:</strong> Nuestro equipo revisará tu consulta</li>
-                    <li><strong>Respuesta:</strong> Te contactaremos en máximo 48 horas</li>
-                    <li><strong>Seguimiento:</strong> Si es necesario, programaremos una llamada</li>
+                    <li><strong>Revisión:</strong> Nuestro equipo revisará tu solicitud de informe</li>
+                    <li><strong>Contacto:</strong> Te contactaremos en máximo 48 horas</li>
+                    <li><strong>Informe:</strong> Te proporcionaremos la información personalizada que necesitas</li>
                 </ul>
             </div>
             
@@ -301,7 +313,7 @@ const confirmationEmailTemplate = ({ name, timestamp }) => `
             </p>
             
             <div class="timestamp">
-                📅 Mensaje enviado el ${timestamp}
+                📅 Solicitud enviada el ${timestamp}
             </div>
         </div>
         

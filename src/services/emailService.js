@@ -5,7 +5,7 @@ class EmailService {
   constructor() {
     this.transporter = null;
     this.initialized = false;
-    this.initialize();
+    // NO inicializar automáticamente - lo haremos bajo demanda
   }
 
   /**
@@ -13,8 +13,11 @@ class EmailService {
    */
   initialize() {
     try {
+      // Usar la configuración que funciona según el diagnóstico
       this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
         auth: {
           user: process.env.EMAIL_USER,
           pass: process.env.EMAIL_PASS
@@ -25,7 +28,7 @@ class EmailService {
       });
 
       this.initialized = true;
-      console.log('📧 Servicio de email inicializado correctamente');
+      console.log('📧 Servicio de email inicializado correctamente (Google Workspace)');
     } catch (error) {
       console.error('❌ Error al inicializar el servicio de email:', error.message);
       this.initialized = false;
@@ -36,6 +39,11 @@ class EmailService {
    * Verifica la configuración del transporter
    */
   async verifyConnection() {
+    // Inicializar si no está listo
+    if (!this.initialized || !this.transporter) {
+      this.initialize();
+    }
+
     if (!this.initialized || !this.transporter) {
       throw new Error('Servicio de email no inicializado');
     }
@@ -53,22 +61,28 @@ class EmailService {
    * Envía email de contacto al administrador
    */
   async sendContactEmail(contactData) {
+    // Asegurar inicialización
+    if (!this.initialized || !this.transporter) {
+      this.initialize();
+    }
+
     if (!this.initialized) {
       throw new Error('Servicio de email no disponible');
     }
 
-    const { name, email, subject, message, phone } = contactData;
+    const { name, email, phone, company, position, message } = contactData;
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: process.env.EMAIL_TO || process.env.EMAIL_USER,
-      subject: `[GoGestia Contact] ${subject}`,
+      subject: `[GoGestia] Un nuevo cliente ha solicitado un informe!`,
       html: contactEmailTemplate({
         name,
         email,
-        subject,
-        message,
         phone,
+        company,
+        position,
+        message,
         timestamp: new Date().toLocaleString('es-ES', {
           timeZone: 'Europe/Madrid',
           year: 'numeric',
@@ -98,6 +112,11 @@ class EmailService {
    * Envía email de confirmación al usuario
    */
   async sendConfirmationEmail(contactData) {
+    // Asegurar inicialización
+    if (!this.initialized || !this.transporter) {
+      this.initialize();
+    }
+
     if (!this.initialized) {
       throw new Error('Servicio de email no disponible');
     }
@@ -107,7 +126,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
-      subject: 'Confirmación de contacto - GoGestia',
+      subject: 'Confirmación de solicitud de informe - GoGestia',
       html: confirmationEmailTemplate({
         name,
         timestamp: new Date().toLocaleString('es-ES', {
@@ -119,7 +138,7 @@ class EmailService {
           minute: '2-digit'
         })
       }),
-      text: `Hola ${name},\n\nGracias por contactar con GoGestia. Hemos recibido tu mensaje y te responderemos lo antes posible.\n\nSaludos,\nEquipo GoGestia`
+      text: `Hola ${name},\n\nGracias por solicitar nuestro informe. Hemos recibido tu solicitud y te contactaremos lo antes posible.\n\nSaludos,\nEquipo GoGestia`
     };
 
     try {
@@ -182,15 +201,17 @@ class EmailService {
    * Genera versión de texto plano del email
    */
   generatePlainTextEmail(contactData) {
-    const { name, email, subject, message, phone } = contactData;
+    const { name, email, phone, company, position, message } = contactData;
     
     return `
-NUEVO MENSAJE DE CONTACTO - GOGESTIA
+NUEVA SOLICITUD DE INFORME - GOGESTIA
 
 Nombre: ${name}
 Email: ${email}
-${phone ? `Teléfono: ${phone}` : ''}
-Asunto: ${subject}
+Teléfono: ${phone}
+Empresa: ${company}
+${position ? `Puesto: ${position}` : ''}
+Asunto: Un nuevo cliente ha solicitado un informe!
 
 Mensaje:
 ${message}

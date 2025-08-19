@@ -113,9 +113,11 @@ Content-Type: application/json
 {
   "name": "Juan Pérez",
   "email": "juan@example.com",
-  "subject": "Consulta sobre servicios",
-  "message": "Hola, me gustaría información sobre sus servicios de gestión empresarial.",
-  "phone": "+34 600 123 456"
+  "phone": "+34 600 123 456",
+  "company": "Empresa Ejemplo S.L.",
+  "position": "Director Comercial",
+  "message": "Hola, me gustaría solicitar información sobre sus servicios de gestión empresarial.",
+  "acceptPrivacy": true
 }
 ```
 
@@ -123,14 +125,14 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "Tu mensaje ha sido enviado correctamente. Te responderemos pronto.",
+  "message": "Tu solicitud de informe ha sido enviada correctamente. Te contactaremos pronto.",
   "data": {
     "timestamp": "2024-01-15T10:30:00.000Z",
     "messageId": "1234567890@gmail.com",
     "confirmationSent": true,
     "responseTime": "1250ms"
   },
-  "code": "MESSAGE_SENT"
+  "code": "REPORT_REQUEST_SENT"
 }
 ```
 
@@ -251,9 +253,11 @@ curl -X POST http://localhost:3000/api/contact \
   -d '{
     "name": "Test User",
     "email": "test@example.com",
-    "subject": "Test message",
+    "phone": "+34 600 000 000",
+    "company": "Test Company S.L.",
+    "position": "CEO",
     "message": "This is a test message from the API.",
-    "phone": "+34 600 000 000"
+    "acceptPrivacy": true
   }'
 
 # Estado del servicio
