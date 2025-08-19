@@ -1,2 +1,311 @@
-# GoGestiaAPI
-API de la web GoGestia
+# 🚀 GoGestia API
+
+API backend para el formulario de contacto de GoGestia, desarrollada con Node.js, Express y Nodemailer.
+
+## 📋 Características
+
+- ✅ Endpoint de contacto con validación robusta
+- ✅ Envío de emails con templates HTML profesionales
+- ✅ Rate limiting para prevenir spam
+- ✅ Sanitización de inputs para prevenir XSS
+- ✅ Logging de errores y monitoreo
+- ✅ CORS configurado para producción
+- ✅ Headers de seguridad con Helmet
+- ✅ Manejo elegante de errores
+- ✅ Health check endpoint
+
+## 🛠️ Stack Tecnológico
+
+- **Node.js** - Runtime de JavaScript
+- **Express.js** - Framework web
+- **Nodemailer** - Servicio de emails
+- **Gmail API** - Proveedor de email
+- **express-validator** - Validación de datos
+- **helmet** - Seguridad HTTP
+- **express-rate-limit** - Rate limiting
+- **cors** - Cross-Origin Resource Sharing
+- **dotenv** - Variables de entorno
+
+## 📦 Instalación
+
+### Prerrequisitos
+- Node.js 16+ instalado
+- Cuenta de Gmail con App Password configurada
+
+### Pasos
+
+1. **Clonar el repositorio**
+   ```bash
+   git clone https://github.com/AlexAlvarezAlmendros/GoGestiaAPI.git
+   cd GoGestiaAPI
+   ```
+
+2. **Instalar dependencias**
+   ```bash
+   npm install
+   ```
+
+3. **Configurar variables de entorno**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Editar `.env` con tus datos:
+   ```env
+   PORT=3000
+   NODE_ENV=development
+   
+   EMAIL_USER=tu-email@gmail.com
+   EMAIL_PASS=tu-app-password
+   EMAIL_FROM="GoGestia Contact" <noreply@gogestia.com>
+   EMAIL_TO=contacto@gogestia.com
+   
+   CORS_ORIGIN=http://localhost:3000,https://gogestia.com
+   
+   RATE_LIMIT_WINDOW_MS=900000
+   RATE_LIMIT_MAX_REQUESTS=5
+   ```
+
+4. **Ejecutar en desarrollo**
+   ```bash
+   npm run dev
+   ```
+
+5. **Ejecutar en producción**
+   ```bash
+   npm start
+   ```
+
+## 🔧 Configuración de Gmail
+
+Para usar Gmail como proveedor de email:
+
+1. **Habilitar 2FA** en tu cuenta de Google
+2. **Generar App Password**:
+   - Ir a [Google Account Security](https://myaccount.google.com/security)
+   - Buscar "App passwords"
+   - Generar una nueva contraseña para "Mail"
+3. **Usar el App Password** en `EMAIL_PASS` (no tu contraseña normal)
+
+## 📚 API Endpoints
+
+### Health Check
+```http
+GET /api/health
+```
+
+**Respuesta de éxito:**
+```json
+{
+  "status": "ok",
+  "message": "GoGestia API está funcionando correctamente",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "version": "1.0.0",
+  "environment": "development"
+}
+```
+
+### Enviar Mensaje de Contacto
+```http
+POST /api/contact
+Content-Type: application/json
+
+{
+  "name": "Juan Pérez",
+  "email": "juan@example.com",
+  "subject": "Consulta sobre servicios",
+  "message": "Hola, me gustaría información sobre sus servicios de gestión empresarial.",
+  "phone": "+34 600 123 456"
+}
+```
+
+**Respuesta de éxito:**
+```json
+{
+  "success": true,
+  "message": "Tu mensaje ha sido enviado correctamente. Te responderemos pronto.",
+  "data": {
+    "timestamp": "2024-01-15T10:30:00.000Z",
+    "messageId": "1234567890@gmail.com",
+    "confirmationSent": true,
+    "responseTime": "1250ms"
+  },
+  "code": "MESSAGE_SENT"
+}
+```
+
+**Respuesta de error:**
+```json
+{
+  "success": false,
+  "error": "Datos de entrada inválidos",
+  "details": [
+    {
+      "field": "email",
+      "message": "Debe proporcionar un email válido",
+      "value": "email-invalido"
+    }
+  ],
+  "code": "VALIDATION_ERROR"
+}
+```
+
+### Estado del Servicio
+```http
+GET /api/contact/status
+```
+
+**Respuesta:**
+```json
+{
+  "status": "operational",
+  "message": "Servicio de contacto funcionando correctamente",
+  "services": {
+    "email": "operational",
+    "validation": "operational"
+  },
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+## 🔒 Seguridad
+
+### Rate Limiting
+- **5 requests** por IP cada **15 minutos**
+- Configurable via variables de entorno
+
+### Validaciones
+- **Sanitización** de todos los inputs
+- **Validación de formato** de email
+- **Prevención de XSS** con escape de HTML
+- **Longitud máxima** de campos
+- **Caracteres permitidos** específicos por campo
+
+### Headers de Seguridad
+- Content Security Policy
+- X-Frame-Options
+- X-Content-Type-Options
+- Referrer-Policy
+
+### CORS
+- Orígenes específicos configurables
+- Métodos permitidos: GET, POST
+- Headers controlados
+
+## 📧 Templates de Email
+
+### Email al Administrador
+- Diseño profesional y responsive
+- Información completa del contacto
+- Formato fácil de leer
+- Links directos para responder
+
+### Email de Confirmación
+- Confirmación automática al usuario
+- Branding de GoGestia
+- Información de tiempos de respuesta
+- Diseño moderno y profesional
+
+## 🚀 Despliegue
+
+### Render
+1. Conectar repositorio en [Render](https://render.com)
+2. Configurar variables de entorno
+3. Deploy automático desde `main`
+
+### Variables de Entorno Necesarias
+```env
+NODE_ENV=production
+PORT=10000
+EMAIL_USER=tu-email@gmail.com
+EMAIL_PASS=tu-app-password
+EMAIL_FROM="GoGestia Contact" <noreply@gogestia.com>
+EMAIL_TO=contacto@gogestia.com
+CORS_ORIGIN=https://gogestia.com
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=5
+```
+
+## 🧪 Testing
+
+### Desarrollo
+```bash
+# Ejecutar en modo desarrollo
+npm run dev
+
+# Lint del código
+npm run lint
+
+# Arreglar problemas de lint
+npm run lint:fix
+```
+
+### Testing Manual
+```bash
+# Health check
+curl http://localhost:3000/api/health
+
+# Test de contacto
+curl -X POST http://localhost:3000/api/contact \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test User",
+    "email": "test@example.com",
+    "subject": "Test message",
+    "message": "This is a test message from the API.",
+    "phone": "+34 600 000 000"
+  }'
+
+# Estado del servicio
+curl http://localhost:3000/api/contact/status
+```
+
+## 📁 Estructura del Proyecto
+
+```
+GoGestiaAPI/
+├── src/
+│   ├── routes/
+│   │   └── contact.js          # Rutas del contacto
+│   ├── services/
+│   │   └── emailService.js     # Servicio de emails
+│   ├── templates/
+│   │   └── emailTemplates.js   # Templates HTML
+│   ├── utils/
+│   │   └── validation.js       # Utilidades de validación
+│   └── server.js               # Servidor principal
+├── .env.example                # Variables de entorno ejemplo
+├── .eslintrc.json             # Configuración ESLint
+├── .gitignore                 # Archivos ignorados por Git
+├── package.json               # Dependencias y scripts
+└── README.md                  # Esta documentación
+```
+
+## 🐛 Troubleshooting
+
+### Error: "Servicio de email no disponible"
+- Verificar credenciales de Gmail
+- Comprobar que el App Password es correcto
+- Revisar configuración de 2FA en Google
+
+### Error: "Rate limit exceeded"
+- Esperar 15 minutos antes de reintentar
+- Verificar configuración de rate limiting
+
+### Error: "CORS"
+- Verificar que el origen está en CORS_ORIGIN
+- Comprobar configuración de CORS en el servidor
+
+## 📞 Soporte
+
+Para soporte técnico o preguntas sobre la API:
+- **Email**: alex@gogestia.com
+- **GitHub Issues**: [Crear issue](https://github.com/AlexAlvarezAlmendros/GoGestiaAPI/issues)
+
+## 📄 Licencia
+
+ISC License - Ver archivo [LICENSE](LICENSE) para más detalles.
+
+---
+
+**GoGestia API** - Desarrollado con ❤️ para optimizar la comunicación empresarial.
