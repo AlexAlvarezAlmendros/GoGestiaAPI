@@ -137,13 +137,15 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# SQLite database
+database.sqlite
+
+# Testing files (keeping for development)
 NUEVO_FORMATO.md
-test-api.js
-test-api.js
 test-api.js
 test-final.js
 test-smtp-fixed.js
 test-smtp-detailed.js
 debug-credentials.js
 SMTP_CONFIGS.md
-test-api.js

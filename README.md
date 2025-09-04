@@ -5,6 +5,7 @@ API backend para el formulario de contacto de GoGestia, desarrollada con Node.js
 ## 📋 Características
 
 - ✅ Endpoint de contacto con validación robusta
+- ✅ **API completa de Blog** con sistema de posts, categorías, tags y autores
 - ✅ Envío de emails con templates HTML profesionales
 - ✅ Rate limiting para prevenir spam
 - ✅ Sanitización de inputs para prevenir XSS
@@ -13,11 +14,14 @@ API backend para el formulario de contacto de GoGestia, desarrollada con Node.js
 - ✅ Headers de seguridad con Helmet
 - ✅ Manejo elegante de errores
 - ✅ Health check endpoint
+- ✅ Base de datos SQLite con Sequelize ORM
 
 ## 🛠️ Stack Tecnológico
 
 - **Node.js** - Runtime de JavaScript
 - **Express.js** - Framework web
+- **Sequelize** - ORM para base de datos
+- **SQLite** - Base de datos ligera
 - **Nodemailer** - Servicio de emails
 - **Gmail API** - Proveedor de email
 - **express-validator** - Validación de datos
@@ -66,12 +70,17 @@ API backend para el formulario de contacto de GoGestia, desarrollada con Node.js
    RATE_LIMIT_MAX_REQUESTS=5
    ```
 
-4. **Ejecutar en desarrollo**
+4. **Inicializar la base de datos (nuevo)**
+   ```bash
+   npm run setup
+   ```
+
+5. **Ejecutar en desarrollo**
    ```bash
    npm run dev
    ```
 
-5. **Ejecutar en producción**
+6. **Ejecutar en producción**
    ```bash
    npm start
    ```
@@ -89,7 +98,29 @@ Para usar Gmail como proveedor de email:
 
 ## 📚 API Endpoints
 
-### Health Check
+### 🏥 Health Check
+```http
+GET /api/health
+```
+
+### 📞 Contacto
+```http
+POST /api/contact
+```
+
+### 📝 Blog API
+La API incluye un sistema completo de blog. Para documentación detallada, ver [BLOG_API.md](BLOG_API.md).
+
+#### Endpoints principales:
+- `GET /api/blog/posts` - Lista de artículos con filtros y paginación
+- `GET /api/blog/posts/:slug` - Artículo específico por slug
+- `GET /api/blog/categories` - Lista de categorías
+- `GET /api/blog/posts/:slug/related` - Artículos relacionados
+- `POST /api/blog/posts/:slug/views` - Incrementar vistas
+
+---
+
+### Health Check (Detalle)
 ```http
 GET /api/health
 ```
@@ -262,6 +293,14 @@ curl -X POST http://localhost:3000/api/contact \
 
 # Estado del servicio
 curl http://localhost:3000/api/contact/status
+
+# Test endpoints del blog
+npm run test:blog
+
+# O manualmente:
+curl http://localhost:3000/api/blog/posts
+curl http://localhost:3000/api/blog/categories
+curl http://localhost:3000/api/blog/posts/5-errores-digitalizacion-procesos
 ```
 
 ## 📁 Estructura del Proyecto
@@ -269,20 +308,36 @@ curl http://localhost:3000/api/contact/status
 ```
 GoGestiaAPI/
 ├── src/
+│   ├── config/
+│   │   ├── database.js         # Configuración Sequelize
+│   │   └── production.js       # Config de producción
+│   ├── models/                 # Modelos de Sequelize
+│   │   ├── index.js           # Relaciones entre modelos
+│   │   ├── Author.js          # Modelo de autores
+│   │   ├── Category.js        # Modelo de categorías
+│   │   ├── Post.js            # Modelo de posts
+│   │   ├── PostTag.js         # Relación posts-tags
+│   │   └── Tag.js             # Modelo de tags
 │   ├── routes/
-│   │   └── contact.js          # Rutas del contacto
+│   │   ├── contact.js         # Rutas del contacto
+│   │   └── blog.js            # Rutas del blog
 │   ├── services/
-│   │   └── emailService.js     # Servicio de emails
+│   │   ├── emailService.js    # Servicio de emails
+│   │   └── blogService.js     # Lógica de negocio del blog
 │   ├── templates/
-│   │   └── emailTemplates.js   # Templates HTML
+│   │   └── emailTemplates.js  # Templates HTML
 │   ├── utils/
-│   │   └── validation.js       # Utilidades de validación
-│   └── server.js               # Servidor principal
-├── .env.example                # Variables de entorno ejemplo
-├── .eslintrc.json             # Configuración ESLint
-├── .gitignore                 # Archivos ignorados por Git
-├── package.json               # Dependencias y scripts
-└── README.md                  # Esta documentación
+│   │   └── validation.js      # Utilidades de validación
+│   └── server.js              # Servidor principal
+├── scripts/
+│   └── init-database.js       # Inicialización de BD
+├── .env.example               # Variables de entorno ejemplo
+├── test-blog-api.js          # Pruebas del blog
+├── BLOG_API.md               # Documentación del blog
+├── .eslintrc.json            # Configuración ESLint
+├── .gitignore                # Archivos ignorados por Git
+├── package.json              # Dependencias y scripts
+└── README.md                 # Esta documentación
 ```
 
 ## 🐛 Troubleshooting

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Upload - GoGestia API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Upload - GoGestia API</h1>
+    <p>Prueba el endpoint <code>/api/upload/image</code> con ImgBB</p>
+    
+    <form id="uploadForm">
+        <div class="form-group">
+            <label for="image">Seleccionar Imagen:</label>
+            <input type="file" id="image" name="image" accept="image/*" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="title">Título (opcional):</label>
+            <input type="text" id="title" name="title" placeholder="Título de la imagen">
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Descripción (opcional):</label>
+            <textarea id="description" name="description" rows="3" placeholder="Descripción de la imagen"></textarea>
+        </div>
+        
+        <button type="submit" id="submitBtn">Subir Imagen</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const resultDiv = document.getElementById('result');
+            
+            // Deshabilitar botón y mostrar estado de carga
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Subiendo...';
+            resultDiv.innerHTML = '';
+            
+            try {
+                const formData = new FormData();
+                const imageFile = document.getElementById('image').files[0];
+                const title = document.getElementById('title').value;
+                const description = document.getElementById('description').value;
+                
+                if (!imageFile) {
+                    throw new Error('Por favor selecciona una imagen');
+                }
+                
+                formData.append('image', imageFile);
+                if (title) formData.append('title', title);
+                if (description) formData.append('description', description);
+                
+                const response = await fetch('http://localhost:3000/api/upload/image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Upload exitoso!\n\nURL: ${data.data.url}\nID: ${data.data.id}\nTamaño: ${Math.round(data.data.size / 1024)} KB\nDimensiones: ${data.data.width}x${data.data.height}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: ${data.error || 'Error desconocido'}\nCódigo: ${data.code || 'N/A'}`;
+                }
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Error: ${error.message}`;
+            } finally {
+                // Rehabilitar botón
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Subir Imagen';
+            }
+        });
+    </script>
+</body>
+</html>
