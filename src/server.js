@@ -8,6 +8,7 @@ const dotenv = require('dotenv');
 const contactRoutes = require('./routes/contact');
 const blogRoutes = require('./routes/blog');
 const uploadRoutes = require('./routes/upload');
+const authRoutes = require('./routes/auth');
 
 // Importar configuración de base de datos
 const { testConnection } = require('./config/database');
@@ -82,6 +83,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api', contactRoutes);
 app.use('/api/blog', blogRoutes);
 app.use('/api', uploadRoutes);
+app.use('/api/auth', authRoutes);
 
 // Ruta raíz
 app.get('/', (req, res) => {
@@ -92,6 +94,17 @@ app.get('/', (req, res) => {
     endpoints: {
       health: 'GET /api/health',
       contact: 'POST /api/contact',
+      auth: {
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login',
+        logout: 'POST /api/auth/logout',
+        profile: 'GET /api/auth/profile',
+        updateProfile: 'PUT /api/auth/profile',
+        refreshToken: 'POST /api/auth/refresh-token',
+        sendVerificationEmail: 'POST /api/auth/send-verification-email',
+        requestPasswordReset: 'POST /api/auth/request-password-reset',
+        me: 'GET /api/auth/me'
+      },
       blog: {
         posts: 'GET /api/blog/posts',
         post: 'GET /api/blog/posts/:slug',

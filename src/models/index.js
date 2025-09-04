@@ -3,6 +3,7 @@ const Category = require('./Category');
 const Author = require('./Author');
 const Tag = require('./Tag');
 const PostTag = require('./PostTag');
+const User = require('./User');
 
 // Definir las relaciones entre modelos
 
@@ -51,5 +52,6 @@ module.exports = {
   Category,
   Author,
   Tag,
-  PostTag
+  PostTag,
+  User
 };
