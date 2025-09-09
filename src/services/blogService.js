@@ -253,7 +253,7 @@ class BlogService {
           p.published_at, p.updated_at, p.read_time, p.views,
           p.meta_title, p.meta_description, p.meta_keywords,
           c.id as category_id, c.name as category_name, c.slug as category_slug,
-          a.name as author_name, a.avatar as author_avatar, a.bio as author_bio
+          a.name as author_name, a.avatar as author_avatar
         FROM posts p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN authors a ON p.author_id = a.id
@@ -295,8 +295,7 @@ class BlogService {
         tags: tags,
         author: {
           name: post.author_name,
-          avatar: post.author_avatar,
-          bio: post.author_bio
+          avatar: post.author_avatar
         },
         publishedAt: post.published_at,
         updatedAt: post.updated_at,
