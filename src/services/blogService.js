@@ -1,0 +1,794 @@
+const { Post, Category, Author, Tag } = require('../models');
+const { Op } = require('sequelize');
+
+class BlogService {
+  
+  /**
+   * Obtiene una lista paginada de posts con filtros
+   */
+  async getPosts(options = {}) {
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      featured,
+      includeUnpublished = false
+    } = options;
+
+    const offset = (page - 1) * limit;
+    const where = {};
+
+    // Solo mostrar publicados a menos que se especifique lo contrario
+    if (!includeUnpublished) {
+      where.status = 'published';
+    }
+
+    // Filtro por categoría
+    if (category) {
+      const categoryRecord = await Category.findOne({ where: { slug: category } });
+      if (categoryRecord) {
+        where.category_id = categoryRecord.id;
+      }
+    }
+
+    // Filtro por destacados
+    if (featured !== undefined) {
+      where.featured = featured === 'true' || featured === true;
+    }
+
+    // Filtro de búsqueda en título y contenido
+    if (search) {
+      where[Op.or] = [
+        { title: { [Op.like]: `%${search}%` } },
+        { content: { [Op.like]: `%${search}%` } },
+        { excerpt: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
+    try {
+      const { count, rows: posts } = await Post.findAndCountAll({
+        where,
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ],
+        attributes: [
+          'id', 'slug', 'title', 'excerpt', 'featured_image',
+          'featured', 'published_at', 'read_time', 'views'
+        ],
+        order: [['published_at', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      });
+
+      // Formatear los datos según la especificación
+      const formattedPosts = posts.map(post => ({
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        featuredImage: post.featured_image,
+        category: post.category,
+        tags: post.tags.map(tag => tag.name),
+        author: post.author,
+        publishedAt: post.published_at,
+        readTime: post.read_time,
+        views: post.views
+      }));
+
+      const totalPages = Math.ceil(count / limit);
+
+      return {
+        posts: formattedPosts,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          totalPages
+        }
+      };
+    } catch (error) {
+      throw new Error(`Error al obtener posts: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtiene un post por su slug
+   */
+  async getPostBySlug(slug) {
+    try {
+      const post = await Post.findOne({
+        where: { 
+          slug,
+          status: 'published'
+        },
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar', 'bio']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ]
+      });
+
+      if (!post) {
+        return null;
+      }
+
+      // Formatear datos según especificación
+      return {
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        content: post.content,
+        featuredImage: post.featured_image,
+        images: [], // TODO: Implementar gestión de imágenes adicionales
+        category: post.category,
+        tags: post.tags.map(tag => tag.name),
+        author: post.author,
+        publishedAt: post.published_at,
+        updatedAt: post.updated_at,
+        readTime: post.read_time,
+        views: post.views,
+        seo: {
+          metaTitle: post.meta_title || post.title,
+          metaDescription: post.meta_description || post.excerpt,
+          keywords: post.meta_keywords ? post.meta_keywords.split(',') : []
+        }
+      };
+    } catch (error) {
+      throw new Error(`Error al obtener post: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtiene todas las categorías con conteo de posts
+   */
+  async getCategories() {
+    try {
+      const categories = await Category.findAll({
+        include: [
+          {
+            model: Post,
+            as: 'posts',
+            where: { status: 'published' },
+            attributes: [],
+            required: false
+          }
+        ],
+        attributes: {
+          include: [
+            [
+              require('sequelize').fn('COUNT', require('sequelize').col('posts.id')),
+              'count'
+            ]
+          ]
+        },
+        group: ['Category.id'],
+        order: [['name', 'ASC']]
+      });
+
+      return categories.map(category => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        count: parseInt(category.dataValues.count || 0)
+      }));
+    } catch (error) {
+      throw new Error(`Error al obtener categorías: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtiene posts relacionados basados en categoría y tags
+   */
+  async getRelatedPosts(slug, limit = 4) {
+    try {
+      const currentPost = await Post.findOne({
+        where: { slug, status: 'published' },
+        include: [
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['id']
+          }
+        ],
+        attributes: ['id', 'category_id']
+      });
+
+      if (!currentPost) {
+        return [];
+      }
+
+      const tagIds = currentPost.tags.map(tag => tag.id);
+      
+      // Buscar posts relacionados por categoría o tags, excluyendo el actual
+      const relatedPosts = await Post.findAll({
+        where: {
+          status: 'published',
+          id: { [Op.ne]: currentPost.id },
+          [Op.or]: [
+            { category_id: currentPost.category_id },
+            ...(tagIds.length > 0 ? [{
+              '$tags.id$': { [Op.in]: tagIds }
+            }] : [])
+          ]
+        },
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ],
+        attributes: [
+          'id', 'slug', 'title', 'excerpt', 'featured_image',
+          'featured', 'published_at', 'read_time', 'views'
+        ],
+        order: [['published_at', 'DESC']],
+        limit: parseInt(limit)
+      });
+
+      // Formatear según especificación
+      return relatedPosts.map(post => ({
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        featuredImage: post.featured_image,
+        category: post.category,
+        tags: post.tags.map(tag => tag.name),
+        author: post.author,
+        publishedAt: post.published_at,
+        readTime: post.read_time,
+        views: post.views
+      }));
+    } catch (error) {
+      throw new Error(`Error al obtener posts relacionados: ${error.message}`);
+    }
+  }
+
+  /**
+   * Crea un nuevo post
+   */
+  async createPost(postData) {
+    try {
+      const {
+        title,
+        content,
+        excerpt,
+        tags = [],
+        author,
+        category,
+        published = false,
+        featured = false,
+        featuredImage,
+        metaTitle,
+        metaDescription,
+        slug
+      } = postData;
+
+      // Validaciones básicas
+      if (!title || !content || !author) {
+        throw new Error('Título, contenido y autor son requeridos');
+      }
+
+      // Generar slug único (desde el proporcionado o del título)
+      let finalSlug;
+      if (slug) {
+        // Si se proporciona un slug, verificar que sea único y generar variante si es necesario
+        finalSlug = await this.ensureUniqueSlug(slug);
+      } else {
+        // Si no se proporciona slug, generar uno único desde el título
+        finalSlug = await this.generateUniqueSlug(title);
+      }
+
+      // Buscar o crear autor (con email requerido)
+      let authorRecord = await Author.findOne({ where: { name: author } });
+      if (!authorRecord) {
+        // Generar email automáticamente si no existe el autor
+        const email = `${author.toLowerCase().replace(/\s+/g, '.')}@gogestia.com`;
+        authorRecord = await Author.create({ 
+          name: author,
+          email: email
+        });
+      } else if (!authorRecord.email) {
+        // Si el autor existe pero no tiene email, actualizarlo
+        const email = `${author.toLowerCase().replace(/\s+/g, '.')}@gogestia.com`;
+        await authorRecord.update({ email: email });
+      }
+
+      // Buscar o crear categoría
+      let categoryRecord;
+      if (category) {
+        if (typeof category === 'string') {
+          categoryRecord = await Category.findOne({ where: { name: category } });
+          if (!categoryRecord) {
+            categoryRecord = await Category.create({
+              name: category,
+              slug: this.generateSlug(category),
+              description: `Categoría de ${category}`
+            });
+          }
+        } else if (typeof category === 'number') {
+          categoryRecord = await Category.findByPk(category);
+          if (!categoryRecord) {
+            throw new Error(`No se encontró la categoría con ID: ${category}`);
+          }
+        }
+      } else {
+        // Crear categoría por defecto si no se especifica
+        categoryRecord = await Category.findOne({ where: { name: 'General' } });
+        if (!categoryRecord) {
+          categoryRecord = await Category.create({
+            name: 'General',
+            slug: 'general',
+            description: 'Categoría general'
+          });
+        }
+      }
+
+      // Generar excerpt si no se proporciona
+      const finalExcerpt = excerpt || content.replace(/<[^>]*>/g, '').substring(0, 200) + '...';
+
+      // Crear el post
+      const newPost = await Post.create({
+        title,
+        content,
+        excerpt: finalExcerpt,
+        slug: finalSlug,
+        author_id: authorRecord.id,
+        category_id: categoryRecord.id,
+        featured_image: featuredImage,
+        meta_title: metaTitle,
+        meta_description: metaDescription,
+        status: published ? 'published' : 'draft',
+        featured: featured,
+        published_at: published ? new Date() : null,
+        read_time: this.calculateReadTime(content)
+      });
+
+      // Manejar tags
+      if (tags.length > 0) {
+        const tagRecords = await Promise.all(
+          tags.map(async (tagName) => {
+            // Buscar tag existente por nombre primero
+            let tag = await Tag.findOne({ where: { name: tagName } });
+            
+            if (!tag) {
+              // Si no existe, crear con slug único
+              const uniqueSlug = await this.generateUniqueTagSlug(tagName);
+              tag = await Tag.create({
+                name: tagName,
+                slug: uniqueSlug
+              });
+            }
+            
+            return tag;
+          })
+        );
+
+        await newPost.setTags(tagRecords);
+      }
+
+      // Retornar el post creado con todas las relaciones
+      const fullPost = await Post.findByPk(newPost.id, {
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar', 'bio']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ]
+      });
+
+      // Formatear datos según especificación
+      return {
+        id: fullPost.id,
+        slug: fullPost.slug,
+        title: fullPost.title,
+        excerpt: fullPost.excerpt,
+        content: fullPost.content,
+        featuredImage: fullPost.featured_image,
+        images: [], // TODO: Implementar gestión de imágenes adicionales
+        category: fullPost.category,
+        tags: fullPost.tags.map(tag => tag.name),
+        author: fullPost.author,
+        publishedAt: fullPost.published_at,
+        updatedAt: fullPost.updated_at,
+        readTime: fullPost.read_time,
+        views: fullPost.views,
+        seo: {
+          metaTitle: fullPost.meta_title || fullPost.title,
+          metaDescription: fullPost.meta_description || fullPost.excerpt,
+          keywords: fullPost.meta_keywords ? fullPost.meta_keywords.split(',') : []
+        }
+      };
+    } catch (error) {
+      console.error('Error detallado al crear post:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        sql: error.sql,
+        errors: error.errors // Para errores de validación de Sequelize
+      });
+      
+      // Si es un error de validación de Sequelize, extraer detalles
+      if (error.name === 'SequelizeValidationError') {
+        const validationErrors = error.errors.map(err => ({
+          field: err.path,
+          value: err.value,
+          message: err.message,
+          type: err.type
+        }));
+        throw new Error(`Errores de validación: ${validationErrors.map(e => `${e.field}: ${e.message}`).join(', ')}`);
+      }
+      
+      // Si es un error de restricción única
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = error.errors[0]?.path || 'campo desconocido';
+        throw new Error(`Ya existe un registro con ese ${field}`);
+      }
+      
+      // Si es un error de restricción de clave foránea
+      if (error.name === 'SequelizeForeignKeyConstraintError') {
+        throw new Error(`Error de relación: ${error.message}`);
+      }
+      
+      throw new Error(`Error al crear post: ${error.message}`);
+    }
+  }
+
+  /**
+   * Genera un slug a partir del título
+   */
+  generateSlug(title) {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9 -]/g, '') // Remover caracteres especiales
+      .replace(/\s+/g, '-') // Reemplazar espacios con guiones
+      .replace(/-+/g, '-') // Reemplazar múltiples guiones con uno solo
+      .trim('-'); // Remover guiones al inicio y final
+  }
+
+  /**
+   * Genera un slug único, añadiendo números si ya existe
+   */
+  async generateUniqueSlug(title) {
+    let baseSlug = this.generateSlug(title);
+    let finalSlug = baseSlug;
+    let counter = 1;
+
+    // Verificar si el slug ya existe y generar variantes hasta encontrar uno único
+    while (await Post.findOne({ where: { slug: finalSlug } })) {
+      counter++;
+      finalSlug = `${baseSlug}-${counter}`;
+    }
+
+    return finalSlug;
+  }
+
+  /**
+   * Asegura que un slug proporcionado sea único, añadiendo números si es necesario
+   */
+  async ensureUniqueSlug(providedSlug) {
+    let finalSlug = providedSlug;
+    let counter = 1;
+
+    // Verificar si el slug ya existe y generar variantes hasta encontrar uno único
+    while (await Post.findOne({ where: { slug: finalSlug } })) {
+      counter++;
+      finalSlug = `${providedSlug}-${counter}`;
+    }
+
+    return finalSlug;
+  }
+
+  /**
+   * Genera un slug único para tags, añadiendo números si es necesario
+   */
+  async generateUniqueTagSlug(name) {
+    let baseSlug = this.generateSlug(name);
+    let finalSlug = baseSlug;
+    let counter = 1;
+
+    // Verificar si el slug ya existe en tags y generar variantes hasta encontrar uno único
+    while (await Tag.findOne({ where: { slug: finalSlug } })) {
+      counter++;
+      finalSlug = `${baseSlug}-${counter}`;
+    }
+
+    return finalSlug;
+  }
+
+  /**
+   * Calcula el tiempo estimado de lectura
+   */
+  calculateReadTime(content) {
+    const wordsPerMinute = 200;
+    const words = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
+    return Math.max(1, Math.ceil(words / wordsPerMinute));
+  }
+
+  /**
+   * Incrementa el contador de vistas de un post
+   */
+  async incrementViews(slug) {
+    try {
+      const [updatedCount] = await Post.update(
+        { views: require('sequelize').literal('views + 1') },
+        { 
+          where: { 
+            slug,
+            status: 'published'
+          }
+        }
+      );
+
+      return updatedCount > 0;
+    } catch (error) {
+      throw new Error(`Error al incrementar vistas: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualiza un post existente
+   */
+  async updatePost(slug, updateData) {
+    try {
+      const existingPost = await Post.findOne({
+        where: { slug },
+        include: [
+          {
+            model: Category,
+            as: 'category'
+          },
+          {
+            model: Author,
+            as: 'author'
+          },
+          {
+            model: Tag,
+            as: 'tags'
+          }
+        ]
+      });
+
+      if (!existingPost) {
+        return null;
+      }
+
+      const {
+        title,
+        content,
+        excerpt,
+        tags,
+        author,
+        category,
+        published,
+        featured,
+        featuredImage,
+        metaTitle,
+        metaDescription
+      } = updateData;
+
+      // Preparar datos de actualización
+      const updateFields = {};
+
+      if (title !== undefined) updateFields.title = title;
+      if (content !== undefined) {
+        updateFields.content = content;
+        updateFields.read_time = this.calculateReadTime(content);
+      }
+      if (excerpt !== undefined) updateFields.excerpt = excerpt;
+      if (featured !== undefined) updateFields.featured = featured;
+      if (featuredImage !== undefined) updateFields.featured_image = featuredImage;
+      if (metaTitle !== undefined) updateFields.meta_title = metaTitle;
+      if (metaDescription !== undefined) updateFields.meta_description = metaDescription;
+
+      // Manejar cambio de estado published
+      if (published !== undefined) {
+        updateFields.status = published ? 'published' : 'draft';
+        if (published && !existingPost.published_at) {
+          updateFields.published_at = new Date();
+        }
+      }
+
+      // Manejar actualización de autor
+      if (author !== undefined) {
+        let authorRecord = await Author.findOne({ where: { name: author } });
+        if (!authorRecord) {
+          const email = `${author.toLowerCase().replace(/\s+/g, '.')}@gogestia.com`;
+          authorRecord = await Author.create({ 
+            name: author,
+            email: email
+          });
+        }
+        updateFields.author_id = authorRecord.id;
+      }
+
+      // Manejar actualización de categoría
+      if (category !== undefined) {
+        let categoryRecord;
+        if (typeof category === 'string') {
+          categoryRecord = await Category.findOne({ where: { name: category } });
+          if (!categoryRecord) {
+            categoryRecord = await Category.create({
+              name: category,
+              slug: this.generateSlug(category),
+              description: `Categoría de ${category}`
+            });
+          }
+        } else if (typeof category === 'number') {
+          categoryRecord = await Category.findByPk(category);
+          if (!categoryRecord) {
+            throw new Error(`No se encontró la categoría con ID: ${category}`);
+          }
+        }
+        if (categoryRecord) {
+          updateFields.category_id = categoryRecord.id;
+        }
+      }
+
+      // Actualizar el post
+      await existingPost.update(updateFields);
+
+      // Manejar actualización de tags
+      if (tags !== undefined && Array.isArray(tags)) {
+        const tagRecords = await Promise.all(
+          tags.map(async (tagName) => {
+            let tag = await Tag.findOne({ where: { name: tagName } });
+            if (!tag) {
+              const uniqueSlug = await this.generateUniqueTagSlug(tagName);
+              tag = await Tag.create({
+                name: tagName,
+                slug: uniqueSlug
+              });
+            }
+            return tag;
+          })
+        );
+        await existingPost.setTags(tagRecords);
+      }
+
+      // Obtener el post actualizado con todas las relaciones
+      const updatedPost = await Post.findByPk(existingPost.id, {
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar', 'bio']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ]
+      });
+
+      // Formatear datos según especificación
+      return {
+        id: updatedPost.id,
+        slug: updatedPost.slug,
+        title: updatedPost.title,
+        excerpt: updatedPost.excerpt,
+        content: updatedPost.content,
+        featuredImage: updatedPost.featured_image,
+        images: [],
+        category: updatedPost.category,
+        tags: updatedPost.tags.map(tag => tag.name),
+        author: updatedPost.author,
+        publishedAt: updatedPost.published_at,
+        updatedAt: updatedPost.updated_at,
+        readTime: updatedPost.read_time,
+        views: updatedPost.views,
+        seo: {
+          metaTitle: updatedPost.meta_title || updatedPost.title,
+          metaDescription: updatedPost.meta_description || updatedPost.excerpt,
+          keywords: updatedPost.meta_keywords ? updatedPost.meta_keywords.split(',') : []
+        }
+      };
+    } catch (error) {
+      console.error('Error al actualizar post:', error);
+      
+      if (error.name === 'SequelizeValidationError') {
+        const validationErrors = error.errors.map(err => ({
+          field: err.path,
+          value: err.value,
+          message: err.message,
+          type: err.type
+        }));
+        throw new Error(`Errores de validación: ${validationErrors.map(e => `${e.field}: ${e.message}`).join(', ')}`);
+      }
+      
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = error.errors[0]?.path || 'campo desconocido';
+        throw new Error(`Ya existe un post con el slug: ${field}`);
+      }
+      
+      throw new Error(`Error al actualizar post: ${error.message}`);
+    }
+  }
+
+  /**
+   * Elimina un post por su slug
+   */
+  async deletePost(slug) {
+    try {
+      const post = await Post.findOne({ where: { slug } });
+      
+      if (!post) {
+        return false;
+      }
+
+      // Eliminar relaciones con tags primero
+      await post.setTags([]);
+      
+      // Eliminar el post
+      await post.destroy();
+      
+      return true;
+    } catch (error) {
+      console.error('Error al eliminar post:', error);
+      throw new Error(`Error al eliminar post: ${error.message}`);
+    }
+  }
+}
+
+module.exports = new BlogService();
