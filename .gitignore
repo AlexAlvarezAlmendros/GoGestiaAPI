@@ -168,3 +168,11 @@ test-unregistered-user.js
 /tests
 /debug
 check-turso-schema.js
+test-production-final.js
+test-endpoints.bat
+test-blog-service-prod.js
+test-api-simple.js
+test-api-prod.js
+start-test-server.js
+migrate-to-status.js
+add-test-data.js
