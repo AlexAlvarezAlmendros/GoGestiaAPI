@@ -165,3 +165,5 @@ test-simple-registration.js
 test-simplified-auth.js
 .gitignore
 test-unregistered-user.js
+/tests
+/debug
