@@ -12,24 +12,91 @@ function ensurePersistentDiskDirectory() {
   const persistentDiskPath = process.env.PERSISTENT_DISK_PATH || '/opt/render/project/data';
   
   console.log(`🔍 Verificando directorio del disco persistente: ${persistentDiskPath}`);
+  console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`📂 Current working directory: ${process.cwd()}`);
   
-  if (!fs.existsSync(persistentDiskPath)) {
-    console.log(`📁 Creando directorio del disco persistente...`);
-    fs.mkdirSync(persistentDiskPath, { recursive: true });
-    console.log(`✅ Directorio creado: ${persistentDiskPath}`);
-  } else {
-    console.log(`✅ Directorio del disco persistente existe: ${persistentDiskPath}`);
+  // En desarrollo, usar directorio local
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`ℹ️ Modo desarrollo - usando SQLite local`);
+    return;
   }
   
-  // Verificar permisos de escritura
   try {
+    // Verificar si el directorio padre existe
+    const parentDir = path.dirname(persistentDiskPath);
+    console.log(`🔍 Verificando directorio padre: ${parentDir}`);
+    
+    if (!fs.existsSync(parentDir)) {
+      console.log(`❌ El directorio padre no existe: ${parentDir}`);
+      console.log(`💡 Esto puede indicar que el disco persistente no está montado`);
+      
+      // Intentar crear en un directorio alternativo
+      const alternativePath = path.join(process.cwd(), 'data');
+      console.log(`🔄 Intentando usar directorio alternativo: ${alternativePath}`);
+      
+      if (!fs.existsSync(alternativePath)) {
+        fs.mkdirSync(alternativePath, { recursive: true });
+      }
+      
+      // Actualizar variable de entorno temporalmente
+      process.env.PERSISTENT_DISK_PATH = alternativePath;
+      console.log(`⚠️ Usando directorio alternativo: ${alternativePath}`);
+      return;
+    }
+    
+    // Crear el directorio del disco persistente si no existe
+    if (!fs.existsSync(persistentDiskPath)) {
+      console.log(`📁 Creando directorio del disco persistente...`);
+      fs.mkdirSync(persistentDiskPath, { recursive: true, mode: 0o755 });
+      console.log(`✅ Directorio creado: ${persistentDiskPath}`);
+    } else {
+      console.log(`✅ Directorio del disco persistente existe: ${persistentDiskPath}`);
+    }
+    
+    // Verificar permisos de escritura
     const testFile = path.join(persistentDiskPath, 'write-test.tmp');
-    fs.writeFileSync(testFile, 'test');
+    fs.writeFileSync(testFile, 'test-write-permissions');
+    const readBack = fs.readFileSync(testFile, 'utf8');
     fs.unlinkSync(testFile);
-    console.log(`✅ Permisos de escritura verificados en: ${persistentDiskPath}`);
+    
+    if (readBack === 'test-write-permissions') {
+      console.log(`✅ Permisos de escritura verificados en: ${persistentDiskPath}`);
+    } else {
+      throw new Error('No se pudo verificar la escritura');
+    }
+    
+    // Mostrar información del directorio
+    const stats = fs.statSync(persistentDiskPath);
+    console.log(`📊 Información del directorio:`);
+    console.log(`   - Permisos: ${stats.mode.toString(8)}`);
+    console.log(`   - Propietario: UID ${stats.uid}, GID ${stats.gid}`);
+    console.log(`   - Tamaño: ${stats.size} bytes`);
+    
   } catch (error) {
-    console.error(`❌ Error de permisos en disco persistente:`, error.message);
-    throw error;
+    console.error(`❌ Error con disco persistente:`, error.message);
+    
+    // Fallback: usar directorio local en el proyecto
+    const fallbackPath = path.join(process.cwd(), 'data');
+    console.log(`🔄 Fallback: usando directorio local ${fallbackPath}`);
+    
+    try {
+      if (!fs.existsSync(fallbackPath)) {
+        fs.mkdirSync(fallbackPath, { recursive: true });
+      }
+      
+      // Probar escritura en fallback
+      const testFile = path.join(fallbackPath, 'write-test.tmp');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      
+      // Actualizar variable de entorno
+      process.env.PERSISTENT_DISK_PATH = fallbackPath;
+      console.log(`✅ Usando directorio fallback: ${fallbackPath}`);
+      
+    } catch (fallbackError) {
+      console.error(`❌ Error también en directorio fallback:`, fallbackError.message);
+      throw new Error(`No se puede crear directorio para SQLite: ${error.message}`);
+    }
   }
 }
 
