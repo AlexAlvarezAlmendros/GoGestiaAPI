@@ -12,11 +12,17 @@ class BlogService {
       limit = 10,
       category,
       search,
-      featured
+      featured,
+      includeUnpublished = false
     } = options;
 
     const offset = (page - 1) * limit;
-    const where = { status: 'published' };
+    const where = {};
+
+    // Solo mostrar publicados a menos que se especifique lo contrario
+    if (!includeUnpublished) {
+      where.status = 'published';
+    }
 
     // Filtro por categoría
     if (category) {
@@ -571,6 +577,216 @@ class BlogService {
       return updatedCount > 0;
     } catch (error) {
       throw new Error(`Error al incrementar vistas: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualiza un post existente
+   */
+  async updatePost(slug, updateData) {
+    try {
+      const existingPost = await Post.findOne({
+        where: { slug },
+        include: [
+          {
+            model: Category,
+            as: 'category'
+          },
+          {
+            model: Author,
+            as: 'author'
+          },
+          {
+            model: Tag,
+            as: 'tags'
+          }
+        ]
+      });
+
+      if (!existingPost) {
+        return null;
+      }
+
+      const {
+        title,
+        content,
+        excerpt,
+        tags,
+        author,
+        category,
+        published,
+        featured,
+        featuredImage,
+        metaTitle,
+        metaDescription
+      } = updateData;
+
+      // Preparar datos de actualización
+      const updateFields = {};
+
+      if (title !== undefined) updateFields.title = title;
+      if (content !== undefined) {
+        updateFields.content = content;
+        updateFields.read_time = this.calculateReadTime(content);
+      }
+      if (excerpt !== undefined) updateFields.excerpt = excerpt;
+      if (featured !== undefined) updateFields.featured = featured;
+      if (featuredImage !== undefined) updateFields.featured_image = featuredImage;
+      if (metaTitle !== undefined) updateFields.meta_title = metaTitle;
+      if (metaDescription !== undefined) updateFields.meta_description = metaDescription;
+
+      // Manejar cambio de estado published
+      if (published !== undefined) {
+        updateFields.status = published ? 'published' : 'draft';
+        if (published && !existingPost.published_at) {
+          updateFields.published_at = new Date();
+        }
+      }
+
+      // Manejar actualización de autor
+      if (author !== undefined) {
+        let authorRecord = await Author.findOne({ where: { name: author } });
+        if (!authorRecord) {
+          const email = `${author.toLowerCase().replace(/\s+/g, '.')}@gogestia.com`;
+          authorRecord = await Author.create({ 
+            name: author,
+            email: email
+          });
+        }
+        updateFields.author_id = authorRecord.id;
+      }
+
+      // Manejar actualización de categoría
+      if (category !== undefined) {
+        let categoryRecord;
+        if (typeof category === 'string') {
+          categoryRecord = await Category.findOne({ where: { name: category } });
+          if (!categoryRecord) {
+            categoryRecord = await Category.create({
+              name: category,
+              slug: this.generateSlug(category),
+              description: `Categoría de ${category}`
+            });
+          }
+        } else if (typeof category === 'number') {
+          categoryRecord = await Category.findByPk(category);
+          if (!categoryRecord) {
+            throw new Error(`No se encontró la categoría con ID: ${category}`);
+          }
+        }
+        if (categoryRecord) {
+          updateFields.category_id = categoryRecord.id;
+        }
+      }
+
+      // Actualizar el post
+      await existingPost.update(updateFields);
+
+      // Manejar actualización de tags
+      if (tags !== undefined && Array.isArray(tags)) {
+        const tagRecords = await Promise.all(
+          tags.map(async (tagName) => {
+            let tag = await Tag.findOne({ where: { name: tagName } });
+            if (!tag) {
+              const uniqueSlug = await this.generateUniqueTagSlug(tagName);
+              tag = await Tag.create({
+                name: tagName,
+                slug: uniqueSlug
+              });
+            }
+            return tag;
+          })
+        );
+        await existingPost.setTags(tagRecords);
+      }
+
+      // Obtener el post actualizado con todas las relaciones
+      const updatedPost = await Post.findByPk(existingPost.id, {
+        include: [
+          {
+            model: Category,
+            as: 'category',
+            attributes: ['id', 'name', 'slug']
+          },
+          {
+            model: Author,
+            as: 'author',
+            attributes: ['name', 'avatar', 'bio']
+          },
+          {
+            model: Tag,
+            as: 'tags',
+            attributes: ['name'],
+            through: { attributes: [] }
+          }
+        ]
+      });
+
+      // Formatear datos según especificación
+      return {
+        id: updatedPost.id,
+        slug: updatedPost.slug,
+        title: updatedPost.title,
+        excerpt: updatedPost.excerpt,
+        content: updatedPost.content,
+        featuredImage: updatedPost.featured_image,
+        images: [],
+        category: updatedPost.category,
+        tags: updatedPost.tags.map(tag => tag.name),
+        author: updatedPost.author,
+        publishedAt: updatedPost.published_at,
+        updatedAt: updatedPost.updated_at,
+        readTime: updatedPost.read_time,
+        views: updatedPost.views,
+        seo: {
+          metaTitle: updatedPost.meta_title || updatedPost.title,
+          metaDescription: updatedPost.meta_description || updatedPost.excerpt,
+          keywords: updatedPost.meta_keywords ? updatedPost.meta_keywords.split(',') : []
+        }
+      };
+    } catch (error) {
+      console.error('Error al actualizar post:', error);
+      
+      if (error.name === 'SequelizeValidationError') {
+        const validationErrors = error.errors.map(err => ({
+          field: err.path,
+          value: err.value,
+          message: err.message,
+          type: err.type
+        }));
+        throw new Error(`Errores de validación: ${validationErrors.map(e => `${e.field}: ${e.message}`).join(', ')}`);
+      }
+      
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = error.errors[0]?.path || 'campo desconocido';
+        throw new Error(`Ya existe un post con el slug: ${field}`);
+      }
+      
+      throw new Error(`Error al actualizar post: ${error.message}`);
+    }
+  }
+
+  /**
+   * Elimina un post por su slug
+   */
+  async deletePost(slug) {
+    try {
+      const post = await Post.findOne({ where: { slug } });
+      
+      if (!post) {
+        return false;
+      }
+
+      // Eliminar relaciones con tags primero
+      await post.setTags([]);
+      
+      // Eliminar el post
+      await post.destroy();
+      
+      return true;
+    } catch (error) {
+      console.error('Error al eliminar post:', error);
+      throw new Error(`Error al eliminar post: ${error.message}`);
     }
   }
 }

@@ -14,7 +14,7 @@ const managementClient = new ManagementClient({
   domain: process.env.AUTH0_DOMAIN,
   clientId: process.env.AUTH0_CLIENT_ID,
   clientSecret: process.env.AUTH0_CLIENT_SECRET,
-  audience: `https://${process.env.AUTH0_DOMAIN}/api/v2/`
+  scope: 'read:users write:users create:users update:users delete:users read:user_metadata write:user_metadata'
 });
 
 // Middleware para verificar JWT tokens

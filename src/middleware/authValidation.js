@@ -30,7 +30,12 @@ const authValidation = {
       .isLength({ min: 2, max: 50 })
       .withMessage('El nickname debe tener entre 2 y 50 caracteres')
       .matches(/^[a-zA-Z0-9_-]+$/)
-      .withMessage('El nickname solo puede contener letras, números, guiones y guiones bajos')
+      .withMessage('El nickname solo puede contener letras, números, guiones y guiones bajos'),
+    
+    body('role')
+      .optional()
+      .isIn(['admin', 'editor', 'viewer'])
+      .withMessage('El rol debe ser: admin, editor o viewer')
   ],
 
   // Validación para login

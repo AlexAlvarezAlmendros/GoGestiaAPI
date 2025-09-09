@@ -18,13 +18,24 @@ class AuthController {
         });
       }
 
-      const { email, password, name, nickname } = req.body;
+      const { email, password, name, nickname, role = 'viewer' } = req.body;
+
+      // Validar que el rol solicitado sea válido para registro
+      const allowedRegistrationRoles = ['admin', 'editor', 'viewer'];
+      if (!allowedRegistrationRoles.includes(role)) {
+        return res.status(400).json({
+          success: false,
+          error: `Rol no válido para registro. Los roles permitidos son: ${allowedRegistrationRoles.join(', ')}`,
+          details: [{ field: 'role', message: 'Rol no válido' }]
+        });
+      }
 
       const result = await authService.register({
         email,
         password,
         name,
-        nickname
+        nickname,
+        role
       });
 
       res.status(201).json(result);

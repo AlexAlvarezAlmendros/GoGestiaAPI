@@ -1,20 +1,21 @@
+// Cargar variables de entorno PRIMERO
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const dotenv = require('dotenv');
 
-// Importar rutas
+// Importar rutas (ahora las variables de entorno ya están disponibles)
 const contactRoutes = require('./routes/contact');
 const blogRoutes = require('./routes/blog');
 const uploadRoutes = require('./routes/upload');
 const authRoutes = require('./routes/auth');
+const roleRoutes = require('./routes/roles');
 
 // Importar configuración de base de datos
 const { testConnection } = require('./config/database');
-
-// Cargar variables de entorno
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -84,6 +85,7 @@ app.use('/api', contactRoutes);
 app.use('/api/blog', blogRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Ruta raíz
 app.get('/', (req, res) => {
@@ -134,6 +136,15 @@ app.use('*', (req, res) => {
 // Middleware de manejo de errores globales
 app.use((error, req, res, next) => {
   console.error('Error no manejado:', error);
+  
+  // Error de autenticación JWT/Auth0
+  if (error.name === 'UnauthorizedError') {
+    return res.status(401).json({
+      error: 'Token de acceso inválido o ausente',
+      message: error.message,
+      code: 'UNAUTHORIZED'
+    });
+  }
   
   // Error de validación
   if (error.name === 'ValidationError') {

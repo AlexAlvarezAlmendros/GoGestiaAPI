@@ -4,6 +4,8 @@ const Author = require('./Author');
 const Tag = require('./Tag');
 const PostTag = require('./PostTag');
 const User = require('./User');
+const Role = require('./Role');
+const UserRole = require('./UserRole');
 
 // Definir las relaciones entre modelos
 
@@ -46,6 +48,48 @@ Tag.belongsToMany(Post, {
   as: 'posts'
 });
 
+// Relaciones de User y Role (Many-to-Many)
+User.belongsToMany(Role, {
+  through: UserRole,
+  foreignKey: 'user_id',
+  otherKey: 'role_id',
+  as: 'roles'
+});
+
+Role.belongsToMany(User, {
+  through: UserRole,
+  foreignKey: 'role_id',
+  otherKey: 'user_id',
+  as: 'users'
+});
+
+// Relación directa de User con Role por defecto
+User.belongsTo(Role, {
+  foreignKey: 'default_role_id',
+  as: 'defaultRole'
+});
+
+Role.hasMany(User, {
+  foreignKey: 'default_role_id',
+  as: 'defaultUsers'
+});
+
+// Relaciones adicionales para UserRole
+UserRole.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user'
+});
+
+UserRole.belongsTo(Role, {
+  foreignKey: 'role_id',
+  as: 'role'
+});
+
+UserRole.belongsTo(User, {
+  foreignKey: 'assigned_by',
+  as: 'assignedByUser'
+});
+
 // Exportar todos los modelos
 module.exports = {
   Post,
@@ -53,5 +97,7 @@ module.exports = {
   Author,
   Tag,
   PostTag,
-  User
+  User,
+  Role,
+  UserRole
 };

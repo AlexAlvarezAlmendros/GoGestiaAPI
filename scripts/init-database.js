@@ -1,5 +1,6 @@
 const { sequelize, testConnection, syncDatabase } = require('../src/config/database');
 const { Post, Category, Author, Tag } = require('../src/models');
+const roleService = require('../src/services/roleService');
 
 const initializeDatabase = async () => {
   try {
@@ -11,7 +12,12 @@ const initializeDatabase = async () => {
     // Sincronizar base de datos (esto creará las tablas)
     await syncDatabase(true); // force: true recreará las tablas
     
-    console.log('📝 Creando datos de ejemplo...');
+    console.log('� Inicializando roles por defecto...');
+    
+    // Inicializar roles por defecto
+    await roleService.initializeDefaultRoles();
+    
+    console.log('�📝 Creando datos de ejemplo...');
     
     // Crear autor de ejemplo
     const author = await Author.create({
@@ -177,12 +183,27 @@ const initializeDatabase = async () => {
     
     console.log('✅ Base de datos inicializada correctamente con datos de ejemplo');
     console.log(`📊 Creados: ${posts.length} posts, ${categories.length} categorías, ${tags.length} tags, 1 autor`);
+    console.log('🔧 Roles por defecto inicializados');
     
     // Mostrar algunos ejemplos de los datos creados
     console.log('\n📝 Posts creados:');
     posts.forEach(post => {
       console.log(`- ${post.title} (${post.slug})`);
     });
+    
+    console.log('\n👤 Roles disponibles:');
+    try {
+      const roles = await roleService.getAllRoles();
+      if (roles && Array.isArray(roles)) {
+        roles.forEach(role => {
+          console.log(`- ${role.name}: ${role.description}`);
+        });
+      } else {
+        console.log('- No se pudieron obtener los roles');
+      }
+    } catch (error) {
+      console.log('- Error obteniendo roles:', error.message);
+    }
     
   } catch (error) {
     console.error('❌ Error al inicializar la base de datos:', error);

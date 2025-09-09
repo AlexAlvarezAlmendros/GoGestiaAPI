@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const authValidation = require('../middleware/authValidation');
 const { checkJwt } = require('../config/auth0');
+const { getUserInfo } = require('../middleware/auth0-permissions');
 
 /**
  * @route   POST /api/auth/register
@@ -84,14 +85,78 @@ router.post('/request-password-reset',
 
 /**
  * @route   GET /api/auth/me
- * @desc    Endpoint de prueba para verificar autenticación
+ * @desc    Obtiene información del usuario desde el token Auth0
  * @access  Private
  */
-router.get('/me', checkJwt, (req, res) => {
-  res.json({
+router.get('/me', checkJwt, getUserInfo, (req, res) => {
+  try {
+    // Devolver información del usuario desde el token JWT
+    res.status(200).json({
+      success: true,
+      message: 'Usuario autenticado',
+      data: {
+        id: req.user.sub,
+        email: req.user.email,
+        name: req.user.name,
+        nickname: req.user.nickname,
+        picture: req.user.picture,
+        emailVerified: req.user.email_verified,
+        roles: req.user.roles || req.user['https://gogestia.com/roles'] || [],
+        permissions: req.user.permissions || req.user.scope?.split(' ') || [],
+        // Información adicional del token
+        tokenInfo: {
+          issuer: req.user.iss,
+          audience: req.user.aud,
+          issuedAt: new Date(req.user.iat * 1000),
+          expiresAt: new Date(req.user.exp * 1000)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error en GET /auth/me:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor',
+      message: 'Error al obtener información del usuario',
+      code: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Verificar estado de autenticación
+router.get('/verify', checkJwt, (req, res) => {
+  res.status(200).json({
     success: true,
-    message: 'Usuario autenticado',
-    user: req.user
+    message: 'Token válido',
+    data: {
+      authenticated: true,
+      userId: req.user.sub,
+      email: req.user.email,
+      roles: req.user.roles || req.user['https://gogestia.com/roles'] || [],
+      tokenValid: true,
+      expiresAt: new Date(req.user.exp * 1000)
+    }
+  });
+});
+
+// Debug endpoint para ver el contenido completo del token
+router.get('/debug-token', checkJwt, (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Debug del token JWT',
+    data: {
+      fullToken: req.user,
+      claims: Object.keys(req.user),
+      roles: {
+        'roles': req.user.roles,
+        'https://gogestia.com/roles': req.user['https://gogestia.com/roles'],
+        'namespace_roles': req.user['https://myapp.example.com/roles']
+      },
+      permissions: {
+        'permissions': req.user.permissions,
+        'scope': req.user.scope
+      }
+    }
   });
 });
 
