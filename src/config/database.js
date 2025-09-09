@@ -1,14 +1,44 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
 
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Función para obtener la ruta de la base de datos
+function getDatabasePath() {
+  if (isProduction) {
+    // Producción: SQLite en disco persistente de Render
+    const persistentDiskPath = process.env.PERSISTENT_DISK_PATH || '/opt/render/project/data';
+    const dbPath = path.join(persistentDiskPath, 'gogestia-sqlite-disk');
+    console.log(`📁 Base de datos SQLite en producción: ${dbPath}`);
+    return dbPath;
+  } else {
+    // Desarrollo: SQLite local
+    const dbPath = path.join(__dirname, '../../database.sqlite');
+    console.log(`📁 Base de datos SQLite en desarrollo: ${dbPath}`);
+    return dbPath;
+  }
+}
+
 // Configuración de la base de datos
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(__dirname, '../../database.sqlite'),
-  logging: process.env.NODE_ENV === 'development' ? console.log : false,
+  storage: getDatabasePath(),
+  logging: isDevelopment ? console.log : false,
   define: {
     timestamps: true,
     underscored: true,
+  },
+  pool: {
+    max: 1, // SQLite no soporta múltiples conexiones concurrentes
+    min: 0,
+    acquire: 30000,
+    idle: 10000
+  },
+  // Configuraciones específicas para SQLite en producción
+  dialectOptions: {
+    // Timeout más largo para operaciones en disco persistente
+    timeout: 60000
   }
 });
 
