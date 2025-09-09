@@ -1,5 +1,8 @@
 const { Post, Category, Author, Tag } = require('../models');
 const { Op } = require('sequelize');
+const { executeSQL } = require('../config/database-wrapper');
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 class BlogService {
   
@@ -7,6 +10,127 @@ class BlogService {
    * Obtiene una lista paginada de posts con filtros
    */
   async getPosts(options = {}) {
+    if (isProduction) {
+      return this.getPostsSQL(options);
+    } else {
+      return this.getPostsSequelize(options);
+    }
+  }
+
+  /**
+   * Versión con SQL directo para Turso (producción)
+   */
+  async getPostsSQL(options = {}) {
+    const {
+      page = 1,
+      limit = 10,
+      category,
+      search,
+      featured,
+      includeUnpublished = false
+    } = options;
+
+    const offset = (page - 1) * limit;
+    let whereConditions = [];
+    let params = [];
+
+    // Solo mostrar publicados a menos que se especifique lo contrario
+    if (!includeUnpublished) {
+      whereConditions.push("p.status = 'published'");
+    }
+
+    // Filtro por categoría
+    if (category) {
+      whereConditions.push('c.slug = ?');
+      params.push(category);
+    }
+
+    // Filtro por destacados
+    if (featured !== undefined) {
+      whereConditions.push('p.featured = ?');
+      params.push(featured === 'true' || featured === true ? 1 : 0);
+    }
+
+    // Filtro de búsqueda
+    if (search) {
+      whereConditions.push('(p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)');
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    try {
+      // Query para contar total
+      const countQuery = `
+        SELECT COUNT(*) as count 
+        FROM posts p 
+        LEFT JOIN categories c ON p.category_id = c.id 
+        ${whereClause}
+      `;
+      
+      const countResult = await executeSQL(countQuery, params);
+      const total = countResult.rows[0].count;
+
+      // Query para obtener posts
+      const postsQuery = `
+        SELECT 
+          p.id, p.slug, p.title, p.excerpt, p.featured_image, 
+          p.featured, p.published_at, p.read_time, p.views,
+          c.id as category_id, c.name as category_name, c.slug as category_slug,
+          a.name as author_name, a.avatar as author_avatar
+        FROM posts p 
+        LEFT JOIN categories c ON p.category_id = c.id 
+        LEFT JOIN authors a ON p.author_id = a.id 
+        ${whereClause}
+        ORDER BY p.published_at DESC 
+        LIMIT ? OFFSET ?
+      `;
+
+      const posts = await executeSQL(postsQuery, [...params, limit, offset]);
+      
+      // Formatear los datos
+      const formattedPosts = posts.rows.map(post => ({
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        featuredImage: post.featured_image,
+        category: post.category_id ? {
+          id: post.category_id,
+          name: post.category_name,
+          slug: post.category_slug
+        } : null,
+        tags: [], // Se cargarán por separado si es necesario
+        author: {
+          name: post.author_name,
+          avatar: post.author_avatar
+        },
+        publishedAt: post.published_at,
+        readTime: post.read_time,
+        views: post.views
+      }));
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        posts: formattedPosts,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages
+        }
+      };
+    } catch (error) {
+      throw new Error(`Error al obtener posts: ${error.message}`);
+    }
+  }
+
+  /**
+   * Versión con Sequelize para desarrollo
+   */
+  async getPostsSequelize(options = {}) {
     const {
       page = 1,
       limit = 10,
@@ -111,6 +235,88 @@ class BlogService {
    * Obtiene un post por su slug
    */
   async getPostBySlug(slug) {
+    if (isProduction) {
+      return this.getPostBySlugSQL(slug);
+    } else {
+      return this.getPostBySlugSequelize(slug);
+    }
+  }
+
+  /**
+   * Versión con SQL directo para Turso (producción)
+   */
+  async getPostBySlugSQL(slug) {
+    try {
+      const query = `
+        SELECT 
+          p.id, p.slug, p.title, p.excerpt, p.content, p.featured_image,
+          p.published_at, p.updated_at, p.read_time, p.views,
+          p.meta_title, p.meta_description, p.meta_keywords,
+          c.id as category_id, c.name as category_name, c.slug as category_slug,
+          a.name as author_name, a.avatar as author_avatar, a.bio as author_bio
+        FROM posts p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN authors a ON p.author_id = a.id
+        WHERE p.slug = ? AND p.status = 'published'
+      `;
+
+      const result = await executeSQL(query, [slug]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const post = result.rows[0];
+
+      // Obtener tags del post
+      const tagsQuery = `
+        SELECT t.name 
+        FROM tags t
+        JOIN post_tags pt ON t.id = pt.tag_id
+        WHERE pt.post_id = ?
+      `;
+      const tagsResult = await executeSQL(tagsQuery, [post.id]);
+      const tags = tagsResult.rows.map(row => row.name);
+
+      // Formatear datos según especificación
+      return {
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        content: post.content,
+        featuredImage: post.featured_image,
+        images: [], // TODO: Implementar gestión de imágenes adicionales
+        category: post.category_id ? {
+          id: post.category_id,
+          name: post.category_name,
+          slug: post.category_slug
+        } : null,
+        tags: tags,
+        author: {
+          name: post.author_name,
+          avatar: post.author_avatar,
+          bio: post.author_bio
+        },
+        publishedAt: post.published_at,
+        updatedAt: post.updated_at,
+        readTime: post.read_time,
+        views: post.views,
+        seo: {
+          metaTitle: post.meta_title || post.title,
+          metaDescription: post.meta_description || post.excerpt,
+          keywords: post.meta_keywords ? post.meta_keywords.split(',') : []
+        }
+      };
+    } catch (error) {
+      throw new Error(`Error al obtener post: ${error.message}`);
+    }
+  }
+
+  /**
+   * Versión con Sequelize para desarrollo
+   */
+  async getPostBySlugSequelize(slug) {
     try {
       const post = await Post.findOne({
         where: { 
@@ -172,6 +378,47 @@ class BlogService {
    * Obtiene todas las categorías con conteo de posts
    */
   async getCategories() {
+    if (isProduction) {
+      return this.getCategoriesSQL();
+    } else {
+      return this.getCategoriesSequelize();
+    }
+  }
+
+  /**
+   * Versión con SQL directo para Turso (producción)
+   */
+  async getCategoriesSQL() {
+    try {
+      const query = `
+        SELECT 
+          c.id, 
+          c.name, 
+          c.slug, 
+          COUNT(p.id) as count
+        FROM categories c
+        LEFT JOIN posts p ON c.id = p.category_id AND p.status = 'published'
+        GROUP BY c.id, c.name, c.slug
+        ORDER BY c.name ASC
+      `;
+
+      const result = await executeSQL(query);
+      
+      return result.rows.map(category => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        count: parseInt(category.count || 0)
+      }));
+    } catch (error) {
+      throw new Error(`Error al obtener categorías: ${error.message}`);
+    }
+  }
+
+  /**
+   * Versión con Sequelize para desarrollo
+   */
+  async getCategoriesSequelize() {
     try {
       const categories = await Category.findAll({
         include: [
