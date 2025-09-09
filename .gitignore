@@ -176,3 +176,4 @@ test-api-prod.js
 start-test-server.js
 migrate-to-status.js
 add-test-data.js
+test-turso.js

@@ -29,13 +29,35 @@ const corsOptions = {
   maxAge: 86400 // Cache preflight por 24 horas
 };
 
-// Configuración de rate limiting
+// Configuración de rate limiting - Más permisivo para uso normal
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutos por defecto
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // 100 requests por defecto
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 5 * 60 * 1000, // 5 minutos por defecto
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // 500 requests por defecto
   message: {
     error: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.',
     code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Función para omitir rate limiting en endpoints específicos
+  skip: (req, res) => {
+    // Omitir rate limiting para endpoints de salud y blog público
+    const exemptPaths = [
+      '/api/health',
+      '/api/blog/posts',
+      '/api/blog/categories'
+    ];
+    return exemptPaths.some(path => req.path.startsWith(path));
+  }
+});
+
+// Rate limiter más estricto para endpoints sensibles
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 50, // 50 requests máximo
+  message: {
+    error: 'Demasiadas solicitudes a endpoint sensible, intenta de nuevo más tarde.',
+    code: 'RATE_LIMIT_STRICT_EXCEEDED'
   },
   standardHeaders: true,
   legacyHeaders: false
@@ -80,12 +102,12 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Rutas principales
-app.use('/api', contactRoutes);
-app.use('/api/blog', blogRoutes);
-app.use('/api', uploadRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/roles', roleRoutes);
+// Rutas principales con rate limiting diferenciado
+app.use('/api', contactRoutes); // Contact usa rate limiting normal
+app.use('/api/blog', blogRoutes); // Blog es público, rate limiting muy permisivo
+app.use('/api', strictLimiter, uploadRoutes); // Upload necesita rate limiting estricto  
+app.use('/api/auth', strictLimiter, authRoutes); // Auth necesita rate limiting estricto
+app.use('/api/roles', strictLimiter, roleRoutes); // Roles necesita rate limiting estricto
 
 // Ruta raíz
 app.get('/', (req, res) => {
