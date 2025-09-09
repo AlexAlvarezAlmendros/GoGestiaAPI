@@ -167,3 +167,4 @@ test-simplified-auth.js
 test-unregistered-user.js
 /tests
 /debug
+check-turso-schema.js
