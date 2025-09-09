@@ -1,4 +1,16 @@
-# 🚀 Guía de Despliegue en Render con SQLite + Persistent Disk
+# ⚠️ OBSOLETO - Guía de Despliegue en Render con SQLite + Persistent Disk
+
+> **NOTA IMPORTANTE**: Esta guía está obsoleta. El proyecto ahora usa **Turso** (SQLite en la nube) en lugar de Persistent Disk.
+> 
+> **Ver la nueva guía**: `DEPLOY.md`
+> 
+> **Ventajas de Turso**:
+> - ✅ Sin costos adicionales (vs $7.25/mes de Persistent Disk)
+> - ✅ Sin problemas de permisos
+> - ✅ Mejor rendimiento y escalabilidad
+> - ✅ Configuración más simple
+
+---
 
 Esta guía te llevará paso a paso para desplegar tu API de GoGestia en Render usando SQLite con Persistent Disk para persistencia de datos.
 

@@ -1,102 +1,38 @@
 /**
- * Script de inicialización de base de datos para producción con SQLite + Persistent Disk
+ * Script de inicialización de base de datos para producción con Turso (SQLite en la nube)
  * Este script se ejecuta durante el build en Render
  */
 
-const fs = require('fs');
-const path = require('path');
-const { sequelize, testConnection, syncDatabase } = require('../src/config/database');
+const { sequelize, testConnection, syncDatabase, tursoClient } = require('../src/config/database');
 
-// Verificar si existe el directorio del disco persistente
-function ensurePersistentDiskDirectory() {
-  const persistentDiskPath = process.env.PERSISTENT_DISK_PATH || '/opt/render/project/data';
-  
-  console.log(`🔍 Verificando directorio del disco persistente: ${persistentDiskPath}`);
-  console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
-  console.log(`📂 Current working directory: ${process.cwd()}`);
-  
-  // En desarrollo, usar directorio local
+// Verificar configuración de Turso para producción
+function checkTursoConfiguration() {
   if (process.env.NODE_ENV !== 'production') {
     console.log(`ℹ️ Modo desarrollo - usando SQLite local`);
     return;
   }
+
+  console.log(`🌐 Verificando configuración de Turso para producción...`);
+  console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
   
-  try {
-    // Verificar si el directorio padre existe
-    const parentDir = path.dirname(persistentDiskPath);
-    console.log(`🔍 Verificando directorio padre: ${parentDir}`);
-    
-    if (!fs.existsSync(parentDir)) {
-      console.log(`❌ El directorio padre no existe: ${parentDir}`);
-      console.log(`💡 Esto puede indicar que el disco persistente no está montado`);
-      
-      // Intentar crear en un directorio alternativo
-      const alternativePath = path.join(process.cwd(), 'data');
-      console.log(`🔄 Intentando usar directorio alternativo: ${alternativePath}`);
-      
-      if (!fs.existsSync(alternativePath)) {
-        fs.mkdirSync(alternativePath, { recursive: true });
-      }
-      
-      // Actualizar variable de entorno temporalmente
-      process.env.PERSISTENT_DISK_PATH = alternativePath;
-      console.log(`⚠️ Usando directorio alternativo: ${alternativePath}`);
-      return;
-    }
-    
-    // Crear el directorio del disco persistente si no existe
-    if (!fs.existsSync(persistentDiskPath)) {
-      console.log(`📁 Creando directorio del disco persistente...`);
-      fs.mkdirSync(persistentDiskPath, { recursive: true, mode: 0o755 });
-      console.log(`✅ Directorio creado: ${persistentDiskPath}`);
-    } else {
-      console.log(`✅ Directorio del disco persistente existe: ${persistentDiskPath}`);
-    }
-    
-    // Verificar permisos de escritura
-    const testFile = path.join(persistentDiskPath, 'write-test.tmp');
-    fs.writeFileSync(testFile, 'test-write-permissions');
-    const readBack = fs.readFileSync(testFile, 'utf8');
-    fs.unlinkSync(testFile);
-    
-    if (readBack === 'test-write-permissions') {
-      console.log(`✅ Permisos de escritura verificados en: ${persistentDiskPath}`);
-    } else {
-      throw new Error('No se pudo verificar la escritura');
-    }
-    
-    // Mostrar información del directorio
-    const stats = fs.statSync(persistentDiskPath);
-    console.log(`📊 Información del directorio:`);
-    console.log(`   - Permisos: ${stats.mode.toString(8)}`);
-    console.log(`   - Propietario: UID ${stats.uid}, GID ${stats.gid}`);
-    console.log(`   - Tamaño: ${stats.size} bytes`);
-    
-  } catch (error) {
-    console.error(`❌ Error con disco persistente:`, error.message);
-    
-    // Fallback: usar directorio local en el proyecto
-    const fallbackPath = path.join(process.cwd(), 'data');
-    console.log(`🔄 Fallback: usando directorio local ${fallbackPath}`);
-    
-    try {
-      if (!fs.existsSync(fallbackPath)) {
-        fs.mkdirSync(fallbackPath, { recursive: true });
-      }
-      
-      // Probar escritura en fallback
-      const testFile = path.join(fallbackPath, 'write-test.tmp');
-      fs.writeFileSync(testFile, 'test');
-      fs.unlinkSync(testFile);
-      
-      // Actualizar variable de entorno
-      process.env.PERSISTENT_DISK_PATH = fallbackPath;
-      console.log(`✅ Usando directorio fallback: ${fallbackPath}`);
-      
-    } catch (fallbackError) {
-      console.error(`❌ Error también en directorio fallback:`, fallbackError.message);
-      throw new Error(`No se puede crear directorio para SQLite: ${error.message}`);
-    }
+  const requiredEnvVars = ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'];
+  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    console.error(`❌ Variables de entorno faltantes para Turso:`);
+    missingVars.forEach(varName => {
+      console.error(`   - ${varName}`);
+    });
+    throw new Error('Configuración de Turso incompleta');
+  }
+  
+  console.log(`✅ Variables de entorno de Turso configuradas:`);
+  console.log(`   - TURSO_DATABASE_URL: ${process.env.TURSO_DATABASE_URL}`);
+  console.log(`   - TURSO_AUTH_TOKEN: ${process.env.TURSO_AUTH_TOKEN ? '[configurado]' : '[faltante]'}`);
+  
+  // Test de conectividad básico si tenemos el cliente directo
+  if (tursoClient) {
+    console.log(`🔌 Cliente Turso directo disponible para pruebas`);
   }
 }
 
@@ -187,13 +123,10 @@ async function seedDefaultData() {
 async function initProductionDatabase() {
   console.log('🚀 Iniciando configuración de base de datos para producción...');
   console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
-  console.log(`📁 PERSISTENT_DISK_PATH: ${process.env.PERSISTENT_DISK_PATH || 'No configurado'}`);
   
   try {
-    // 1. Verificar/crear directorio del disco persistente
-    if (process.env.NODE_ENV === 'production') {
-      ensurePersistentDiskDirectory();
-    }
+    // 1. Verificar configuración (Turso en producción, SQLite local en desarrollo)
+    checkTursoConfiguration();
     
     // 2. Probar conexión a la base de datos
     console.log('🔗 Probando conexión a la base de datos...');
@@ -206,7 +139,7 @@ async function initProductionDatabase() {
     // 4. Crear datos por defecto si no existen
     await seedDefaultData();
     
-    console.log('🎉 Base de datos inicializada correctamente para producción');
+    console.log('🎉 Base de datos inicializada correctamente');
     
     // 5. Mostrar información final
     const models = require('../src/models');
@@ -222,6 +155,12 @@ async function initProductionDatabase() {
     console.log(`   - Autores: ${stats.authors}`);
     console.log(`   - Tags: ${stats.tags}`);
     console.log(`   - Posts: ${stats.posts}`);
+    
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🌐 Base de datos Turso lista para producción');
+    } else {
+      console.log('💻 Base de datos SQLite local lista para desarrollo');
+    }
     
   } catch (error) {
     console.error('❌ Error inicializando base de datos:', error);
@@ -239,6 +178,6 @@ if (require.main === module) {
 
 module.exports = {
   initProductionDatabase,
-  ensurePersistentDiskDirectory,
+  checkTursoConfiguration,
   seedDefaultData
 };

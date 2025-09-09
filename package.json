@@ -51,6 +51,7 @@
   },
   "homepage": "https://github.com/AlexAlvarezAlmendros/GoGestiaAPI#readme",
   "dependencies": {
+    "@libsql/client": "^0.5.6",
     "auth0": "^4.29.0",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
