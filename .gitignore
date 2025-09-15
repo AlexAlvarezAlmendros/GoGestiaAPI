@@ -177,3 +177,15 @@ start-test-server.js
 migrate-to-status.js
 add-test-data.js
 test-turso.js
+add-sample-data-api.js
+add-turso-sample-data.js
+run-production-tests.js
+test-blog-production.js
+.gitignore
+test-create-posts.js
+.gitignore
+test-posts-endpoints.js
+test-production.bat
+test-turso-connection.js
+test-turso-insert-with-jwt.js
+verify-turso-schema.js
