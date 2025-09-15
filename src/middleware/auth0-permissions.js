@@ -138,7 +138,6 @@ const requireAnyRole = (roles) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       console.log('🎫 TOKEN JWT COMPLETO:', token);
-      
       // Decodificar el payload del token (sin verificar la firma)
       try {
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
@@ -203,7 +202,7 @@ const requireAnyRole = (roles) => {
 const getUserInfo = (req, res, next) => {
   if (req.user) {
     // Debug: Log completo del token
-    console.log('🔍 DEBUG - Token JWT completo:', JSON.stringify(req.user, null, 2));
+    console.log('🔍 DEBUG - Token JWT completo:', req);
     
     // Extraer información básica del token
     req.userInfo = {

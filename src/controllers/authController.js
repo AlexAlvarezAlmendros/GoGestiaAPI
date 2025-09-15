@@ -75,6 +75,23 @@ class AuthController {
         password
       });
 
+      // 🔍 MOSTRAR TOKEN JWT CRUDO EN CONSOLA (SOLO PARA DEBUGGING)
+      if (result.success && result.data && result.data.access_token) {
+        console.log('🔐 === LOGIN EXITOSO ===');
+        console.log(`👤 Usuario: ${email}`);
+        console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
+        console.log('🎫 JWT TOKEN CRUDO:');
+        console.log('─'.repeat(80));
+        console.log(result.data.access_token);
+        console.log('─'.repeat(80));
+        console.log(`📝 Token type: ${result.data.token_type || 'Bearer'}`);
+        console.log(`⏱️ Expires in: ${result.data.expires_in || 'No especificado'} segundos`);
+        if (result.data.refresh_token) {
+          console.log('🔄 Refresh token también disponible');
+        }
+        console.log('🔐 === FIN TOKEN INFO ===\n');
+      }
+
       res.status(200).json(result);
 
     } catch (error) {
@@ -111,6 +128,19 @@ class AuthController {
       }
 
       const result = await authService.refreshToken(refresh_token);
+
+      // 🔍 MOSTRAR NUEVO TOKEN JWT CRUDO EN CONSOLA (SOLO PARA DEBUGGING)
+      if (result.success && result.data && result.data.access_token) {
+        console.log('🔄 === TOKEN REFRESCADO ===');
+        console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
+        console.log('🎫 NUEVO JWT TOKEN CRUDO:');
+        console.log('─'.repeat(80));
+        console.log(result.data.access_token);
+        console.log('─'.repeat(80));
+        console.log(`📝 Token type: ${result.data.token_type || 'Bearer'}`);
+        console.log(`⏱️ Expires in: ${result.data.expires_in || 'No especificado'} segundos`);
+        console.log('🔄 === FIN REFRESH TOKEN INFO ===\n');
+      }
 
       res.status(200).json(result);
 
