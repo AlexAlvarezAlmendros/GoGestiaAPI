@@ -46,25 +46,81 @@ class TursoBlogService {
   /**
    * Obtiene todos los posts con paginación
    */
-  async getAllPosts(limit = 10, offset = 0) {
+  async getAllPosts(options = {}) {
     try {
+      const {
+        page = 1,
+        limit = 10,
+        category,
+        search,
+        featured,
+        includeUnpublished = false
+      } = options;
+
+      const offset = (page - 1) * limit;
+      
+      let whereConditions = [];
+      let queryParams = [];
+
+      // Solo incluir posts publicados a menos que se especifique lo contrario
+      if (!includeUnpublished) {
+        whereConditions.push('p.status = ?');
+        queryParams.push('published');
+      }
+
+      // Filtro por categoría
+      if (category) {
+        whereConditions.push('c.slug = ?');
+        queryParams.push(category);
+      }
+
+      // Filtro por búsqueda
+      if (search) {
+        whereConditions.push('(p.title LIKE ? OR p.excerpt LIKE ? OR p.content LIKE ?)');
+        const searchTerm = `%${search}%`;
+        queryParams.push(searchTerm, searchTerm, searchTerm);
+      }
+
+      // Filtro por featured
+      if (featured !== undefined) {
+        whereConditions.push('p.featured = ?');
+        queryParams.push(featured ? 1 : 0);
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
       const query = `
         SELECT 
           p.id, p.slug, p.title, p.excerpt, p.featured_image, 
-          p.featured, p.published_at, p.read_time, p.views, p.status, p.published,
+          p.featured, p.published_at, p.read_time, p.views, p.status,
           c.id as category_id, c.name as category_name, c.slug as category_slug,
           a.name as author_name, a.avatar as author_avatar
         FROM posts p 
         LEFT JOIN categories c ON p.category_id = c.id 
         LEFT JOIN authors a ON p.author_id = a.id 
-        WHERE p.published = 1 AND p.status = 'published'
+        ${whereClause}
         ORDER BY p.published_at DESC 
         LIMIT ? OFFSET ?
       `;
 
-      const result = await executeSQL(query, [limit, offset]);
+      // Agregar limit y offset al final
+      queryParams.push(limit, offset);
+
+      const result = await executeSQL(query, queryParams);
       
-      return result.rows.map(post => ({
+      // Obtener el total de posts para paginación
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM posts p 
+        LEFT JOIN categories c ON p.category_id = c.id 
+        ${whereClause}
+      `;
+      
+      const countParams = queryParams.slice(0, -2); // Remover limit y offset
+      const countResult = await executeSQL(countQuery, countParams);
+      const total = countResult.rows[0].total;
+
+      const posts = result.rows.map(post => ({
         id: post.id,
         slug: post.slug,
         title: post.title,
@@ -83,8 +139,19 @@ class TursoBlogService {
         publishedAt: post.published_at,
         readTime: post.read_time,
         views: post.views,
-        featured: post.featured === 1
+        featured: post.featured === 1,
+        status: post.status
       }));
+
+      return {
+        posts,
+        pagination: {
+          current: page,
+          total: Math.ceil(total / limit),
+          limit,
+          totalItems: total
+        }
+      };
       
     } catch (error) {
       console.error('❌ Error obteniendo posts desde Turso:', error);
@@ -129,14 +196,14 @@ class TursoBlogService {
         INSERT INTO posts (
           title, content, excerpt, slug, author_id, category_id, 
           featured_image, meta_title, meta_description, status, 
-          featured, published, published_at, read_time, views
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          featured, published_at, read_time, views
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const readTime = this.calculateReadTime(content);
-      const publishedValue = published ? 1 : 0;
       const featuredValue = featured ? 1 : 0;
       const publishedAt = published ? new Date().toISOString() : null;
+      const statusValue = published ? 'published' : 'draft';
 
       const result = await executeSQL(insertQuery, [
         title,
@@ -148,9 +215,8 @@ class TursoBlogService {
         featuredImage || null,
         metaTitle || null,
         metaDescription || null,
-        published ? 'published' : 'draft',
+        statusValue,
         featuredValue,
-        publishedValue,
         publishedAt,
         readTime,
         0 // views inicial
@@ -360,6 +426,358 @@ class TursoBlogService {
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .trim('-');
+  }
+
+  /**
+   * Obtiene todas las categorías
+   */
+  async getCategories() {
+    try {
+      const query = `
+        SELECT 
+          c.id, c.name, c.slug, c.description,
+          COUNT(p.id) as post_count
+        FROM categories c
+        LEFT JOIN posts p ON c.id = p.category_id AND p.status = 'published'
+        GROUP BY c.id, c.name, c.slug, c.description
+        ORDER BY c.name ASC
+      `;
+
+      const result = await executeSQL(query);
+      
+      return result.rows.map(category => ({
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+        description: category.description,
+        postCount: category.post_count || 0
+      }));
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo categorías desde Turso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene un post por su slug
+   */
+  async getPostBySlug(slug) {
+    try {
+      const query = `
+        SELECT 
+          p.id, p.slug, p.title, p.excerpt, p.content, p.featured_image,
+          p.published_at, p.updated_at, p.read_time, p.views,
+          p.meta_title, p.meta_description, p.status, p.featured,
+          c.id as category_id, c.name as category_name, c.slug as category_slug,
+          a.name as author_name, a.avatar as author_avatar
+        FROM posts p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN authors a ON p.author_id = a.id
+        WHERE p.slug = ? AND p.status = 'published'
+      `;
+
+      const result = await executeSQL(query, [slug]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const post = result.rows[0];
+
+      // Obtener tags del post
+      const tagsQuery = `
+        SELECT t.name 
+        FROM tags t
+        JOIN post_tags pt ON t.id = pt.tag_id
+        WHERE pt.post_id = ?
+      `;
+      const tagsResult = await executeSQL(tagsQuery, [post.id]);
+      const tags = tagsResult.rows.map(row => row.name);
+
+      return {
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        content: post.content,
+        featuredImage: post.featured_image,
+        category: post.category_id ? {
+          id: post.category_id,
+          name: post.category_name,
+          slug: post.category_slug
+        } : null,
+        tags: tags,
+        author: {
+          name: post.author_name,
+          avatar: post.author_avatar
+        },
+        publishedAt: post.published_at,
+        updatedAt: post.updated_at,
+        readTime: post.read_time,
+        views: post.views,
+        status: post.status,
+        featured: post.featured === 1,
+        published: post.status === 'published',
+        seo: {
+          metaTitle: post.meta_title || post.title,
+          metaDescription: post.meta_description || post.excerpt,
+          keywords: []
+        }
+      };
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo post por slug desde Turso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene posts relacionados por categoría y tags
+   */
+  async getRelatedPosts(slug, limit = 4) {
+    try {
+      // Primero obtener el post actual para conocer su categoría y tags
+      const currentPostQuery = `
+        SELECT p.id, p.category_id 
+        FROM posts p 
+        WHERE p.slug = ? AND p.status = 'published'
+      `;
+      
+      const currentPostResult = await executeSQL(currentPostQuery, [slug]);
+      
+      if (currentPostResult.rows.length === 0) {
+        return [];
+      }
+      
+      const currentPost = currentPostResult.rows[0];
+      
+      // Obtener posts relacionados por categoría, excluyendo el post actual
+      const query = `
+        SELECT DISTINCT
+          p.id, p.slug, p.title, p.excerpt, p.featured_image,
+          p.published_at, p.read_time, p.views, p.featured,
+          c.id as category_id, c.name as category_name, c.slug as category_slug,
+          a.name as author_name, a.avatar as author_avatar
+        FROM posts p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN authors a ON p.author_id = a.id
+        WHERE p.category_id = ? 
+          AND p.id != ? 
+          AND p.status = 'published'
+        ORDER BY p.published_at DESC
+        LIMIT ?
+      `;
+      
+      const result = await executeSQL(query, [currentPost.category_id, currentPost.id, limit]);
+      
+      return result.rows.map(post => ({
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        excerpt: post.excerpt,
+        featuredImage: post.featured_image,
+        category: post.category_id ? {
+          id: post.category_id,
+          name: post.category_name,
+          slug: post.category_slug
+        } : null,
+        author: {
+          name: post.author_name,
+          avatar: post.author_avatar
+        },
+        publishedAt: post.published_at,
+        readTime: post.read_time,
+        views: post.views,
+        featured: post.featured === 1
+      }));
+      
+    } catch (error) {
+      console.error('❌ Error obteniendo posts relacionados desde Turso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Incrementa las vistas de un post
+   */
+  async incrementViews(slug) {
+    try {
+      const query = `
+        UPDATE posts 
+        SET views = views + 1, updated_at = datetime('now')
+        WHERE slug = ? AND status = 'published'
+      `;
+      
+      const result = await executeSQL(query, [slug]);
+      
+      return result.changes > 0;
+      
+    } catch (error) {
+      console.error('❌ Error incrementando vistas desde Turso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza un post existente
+   */
+  async updatePost(slug, updateData) {
+    try {
+      // Primero verificar que el post existe
+      const existingPost = await this.getPostBySlug(slug);
+      if (!existingPost) {
+        return null;
+      }
+
+      const {
+        title,
+        content,
+        excerpt,
+        tags = [],
+        author,
+        category,
+        published,
+        featured,
+        featuredImage,
+        metaTitle,
+        metaDescription,
+        slug: newSlug
+      } = updateData;
+
+      // Preparar los valores para actualizar
+      const updates = [];
+      const values = [];
+
+      if (title !== undefined) {
+        updates.push('title = ?');
+        values.push(title);
+      }
+
+      if (content !== undefined) {
+        updates.push('content = ?');
+        values.push(content);
+        
+        // Recalcular tiempo de lectura si se actualiza el contenido
+        updates.push('read_time = ?');
+        values.push(this.calculateReadTime(content));
+      }
+
+      if (excerpt !== undefined) {
+        updates.push('excerpt = ?');
+        values.push(excerpt);
+      }
+
+      if (featuredImage !== undefined) {
+        updates.push('featured_image = ?');
+        values.push(featuredImage);
+      }
+
+      if (metaTitle !== undefined) {
+        updates.push('meta_title = ?');
+        values.push(metaTitle);
+      }
+
+      if (metaDescription !== undefined) {
+        updates.push('meta_description = ?');
+        values.push(metaDescription);
+      }
+
+      if (featured !== undefined) {
+        updates.push('featured = ?');
+        values.push(featured ? 1 : 0);
+      }
+
+      if (published !== undefined) {
+        updates.push('status = ?');
+        values.push(published ? 'published' : 'draft');
+        
+        if (published) {
+          updates.push('published_at = ?');
+          values.push(new Date().toISOString());
+        }
+      }
+
+      // Manejar autor si se proporciona
+      if (author !== undefined) {
+        const authorId = await this.findOrCreateAuthor(author);
+        updates.push('author_id = ?');
+        values.push(authorId);
+      }
+
+      // Manejar categoría si se proporciona
+      if (category !== undefined) {
+        const categoryId = category ? await this.findOrCreateCategory(category) : null;
+        updates.push('category_id = ?');
+        values.push(categoryId);
+      }
+
+      // Manejar nuevo slug si se proporciona
+      if (newSlug !== undefined && newSlug !== slug) {
+        const uniqueSlug = await this.generateUniqueSlug(newSlug);
+        updates.push('slug = ?');
+        values.push(uniqueSlug);
+      }
+
+      // Agregar updated_at
+      updates.push('updated_at = ?');
+      values.push(new Date().toISOString());
+
+      // Ejecutar la actualización
+      if (updates.length > 0) {
+        values.push(slug); // Para el WHERE
+        const updateQuery = `UPDATE posts SET ${updates.join(', ')} WHERE slug = ?`;
+        await executeSQL(updateQuery, values);
+      }
+
+      // Manejar tags si se proporcionan
+      if (tags !== undefined) {
+        // Eliminar tags existentes
+        await executeSQL('DELETE FROM post_tags WHERE post_id = ?', [existingPost.id]);
+        
+        // Agregar nuevos tags
+        if (tags.length > 0) {
+          await this.handlePostTags(existingPost.id, tags);
+        }
+      }
+
+      // Retornar el post actualizado
+      const finalSlug = newSlug && newSlug !== slug ? await this.generateUniqueSlug(newSlug) : slug;
+      return await this.getPostBySlug(finalSlug);
+      
+    } catch (error) {
+      console.error('❌ Error actualizando post en Turso:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina un post
+   */
+  async deletePost(slug) {
+    try {
+      // Primero obtener el ID del post
+      const postQuery = 'SELECT id FROM posts WHERE slug = ?';
+      const postResult = await executeSQL(postQuery, [slug]);
+      
+      if (postResult.rows.length === 0) {
+        return false;
+      }
+      
+      const postId = postResult.rows[0].id;
+      
+      // Eliminar relaciones con tags
+      await executeSQL('DELETE FROM post_tags WHERE post_id = ?', [postId]);
+      
+      // Eliminar el post
+      const deleteResult = await executeSQL('DELETE FROM posts WHERE slug = ?', [slug]);
+      
+      return deleteResult.changes > 0;
+      
+    } catch (error) {
+      console.error('❌ Error eliminando post desde Turso:', error);
+      throw error;
+    }
   }
 
   /**
