@@ -20,14 +20,11 @@
     "test:manual": "echo \"Para pruebas manuales, ejecuta 'npm run dev' y luego 'npm test' en otra terminal\"",
     "predeploy": "node debug/pre-deploy-check.js",
     "deploy:check": "npm run predeploy && npm run lint",
-    "db:init": "node scripts/init-database.js",
+    "db:init": "node scripts/init-turso.js",
     "db:setup": "npm run db:init",
-    "db:add-sample": "node scripts/add-sample-data.js",
-    "db:init-users": "node scripts/init-users-table.js",
-    "db:init-production": "node scripts/init-production-db.js",
-    "setup": "npm install && npm run db:init && npm run db:init-users",
-    "render-build": "npm install && npm run db:init-production",
-    "render-start": "NODE_ENV=production node src/server.js"
+    "setup": "npm install && npm run db:init",
+    "vercel-build": "echo 'Build completed'",
+    "production-start": "NODE_ENV=production node src/server.js"
   },
   "repository": {
     "type": "git",
@@ -52,7 +49,6 @@
   "homepage": "https://github.com/AlexAlvarezAlmendros/GoGestiaAPI#readme",
   "dependencies": {
     "@libsql/client": "^0.5.6",
-    "@libsql/sqlite3": "^0.3.1",
     "auth0": "^4.29.0",
     "axios": "^1.11.0",
     "cors": "^2.8.5",
@@ -68,11 +64,9 @@
     "jwks-rsa": "^3.2.0",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.5",
-    "sequelize": "^6.37.7",
     "sharp": "^0.34.3"
   },
   "devDependencies": {
-    "sqlite3": "^5.1.7",
     "eslint": "^9.33.0",
     "nodemon": "^3.1.10"
   }

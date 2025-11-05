@@ -1,130 +1,46 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+/**
+ * Modelo Post para Turso
+ * Las operaciones complejas se manejan en tursoBlogService
+ */
+const { executeSQL } = require('../config/database-wrapper');
 
-const Post = sequelize.define('Post', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  slug: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: {
-      notEmpty: true,
-      is: /^[a-z0-9-]+$/
-    }
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    validate: {
-      notEmpty: true,
-      len: [5, 200]
-    }
-  },
-  excerpt: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-    validate: {
-      notEmpty: true,
-      len: [20, 500]
-    }
-  },
-  content: {
-    type: DataTypes.TEXT,
-    allowNull: false,
-    validate: {
-      notEmpty: true
-    }
-  },
-  featured_image: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  category_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'categories',
-      key: 'id'
-    }
-  },
-  author_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'authors',
-      key: 'id'
-    }
-  },
-  status: {
-    type: DataTypes.ENUM('draft', 'published'),
-    allowNull: false,
-    defaultValue: 'draft'
-  },
-  featured: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
-  },
-  published_at: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  views: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0
-  },
-  read_time: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 1
-  },
-  meta_title: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    validate: {
-      len: [0, 60]
-    }
-  },
-  meta_description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-    validate: {
-      len: [0, 160]
-    }
-  },
-  meta_keywords: {
-    type: DataTypes.TEXT,
-    allowNull: true
+class PostModel {
+  static async findBySlug(slug) {
+    const sql = 'SELECT * FROM posts WHERE slug = ?';
+    const result = await executeSQL(sql, [slug]);
+    return result.rows.length > 0 ? result.rows[0] : null;
   }
-}, {
-  tableName: 'posts',
-  timestamps: true,
-  indexes: [
-    {
-      unique: true,
-      fields: ['slug']
-    },
-    {
-      fields: ['status']
-    },
-    {
-      fields: ['featured']
-    },
-    {
-      fields: ['published_at']
-    },
-    {
-      fields: ['category_id']
-    },
-    {
-      fields: ['author_id']
-    }
-  ]
-});
 
-module.exports = Post;
+  static async findById(id) {
+    const sql = 'SELECT * FROM posts WHERE id = ?';
+    const result = await executeSQL(sql, [id]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  }
+
+  static async findAll(options = {}) {
+    const { limit, offset, where } = options;
+    let sql = 'SELECT * FROM posts';
+    const params = [];
+    
+    if (where && where.status) {
+      sql += ' WHERE status = ?';
+      params.push(where.status);
+    }
+    
+    sql += ' ORDER BY published_at DESC';
+    
+    if (limit) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+      if (offset) {
+        sql += ' OFFSET ?';
+        params.push(offset);
+      }
+    }
+    
+    const result = await executeSQL(sql, params);
+    return result.rows;
+  }
+}
+
+module.exports = PostModel;

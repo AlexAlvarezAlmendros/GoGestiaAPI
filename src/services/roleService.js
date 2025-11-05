@@ -1,5 +1,4 @@
 const { Role, User, UserRole } = require('../models');
-const { Op } = require('sequelize');
 
 class RoleService {
   
